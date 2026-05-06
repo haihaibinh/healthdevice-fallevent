@@ -1,0 +1,22 @@
+{
+  "name": "healthtrack-backend",
+  "version": "1.0.0",
+  "description": "HealthTrack Backend",
+  "main": "index.js",
+  "scripts": {
+    "dev": "node index.js",
+    "start": "node index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "aedes": "^0.47.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "mqtt": "^5.15.1",
+    "pg": "^8.20.0",
+    "ws": "^8.20.0"
+  }
+}
