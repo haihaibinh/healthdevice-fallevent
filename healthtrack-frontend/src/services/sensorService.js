@@ -63,18 +63,27 @@ export function mapToFrontend(row) {
   return {
     device_id: row.device_id,
     timestamp: row.timestamp,
-    hr: row.biometric?.heart_rate ?? row.heart_rate ?? row.hr ?? null,
+
+    // Vitals — DB lưu flat: heart_rate, spo2, hrv
+    hr:  row.biometric?.heart_rate ?? row.heart_rate ?? row.hr ?? null,
     spo2: row.biometric?.spo2 ?? row.spo2 ?? null,
-    hrv: row.biometric?.hrv ?? row.hrv ?? null,
-    emg_rms: row.physics?.emg ?? row.emg ?? row.emg_rms ?? null,
-    acc_mag: row.physics?.acceleration ?? row.acceleration ?? row.acc_mag ?? null,
-    tilt_angle: row.physics?.angle ?? row.angle ?? row.tilt_angle ?? null,
-    risk_score: row.risk_score != null ? parseFloat(row.risk_score) : null,
+    hrv:  row.biometric?.hrv  ?? row.hrv  ?? null,
+
+    // Motion — DB lưu: emg, acceleration, angle
+    // WebSocket gửi: raw_data.emg_rms, raw_data.acc_g, raw_data.angle_deg
+    emg_rms:    row.raw_data?.emg_rms   ?? row.physics?.emg         ?? row.emg         ?? row.emg_rms    ?? null,
+    acc_mag:    row.raw_data?.acc_g     ?? row.physics?.acceleration ?? row.acceleration ?? row.acc_mag   ?? null,
+    tilt_angle: row.raw_data?.angle_deg ?? row.physics?.angle       ?? row.angle        ?? row.tilt_angle ?? null,
+
+    risk_score:    row.risk_score != null ? parseFloat(row.risk_score) : null,
     battery_node1: row.battery_node1 ?? null,
     battery_node2: row.battery_node2 ?? null,
+
+    // inference.muscle_status lưu vào risk_score, fall_detected lưu vào event
     activity_label:
       row.event === 1 ? 'fall'
       : row.event === 2 ? 'near_fall'
+      : row.inference?.fall_detected === 1 ? 'fall'
       : row.activity_label ?? 'standing',
   };
 }
@@ -83,17 +92,17 @@ export function mapToFallEvent(row) {
   if (!row) return null;
   if (row.event_id) return row;
 
-  const angle = row.physics?.angle ?? row.angle ?? row.tilt_angle_peak ?? 0;
-  const acc = row.physics?.acceleration ?? row.acceleration ?? row.acc_mag_peak ?? 0;
+  const angle = row.raw_data?.angle_deg ?? row.physics?.angle ?? row.angle ?? row.tilt_angle_peak ?? 0;
+  const acc   = row.raw_data?.acc_g    ?? row.physics?.acceleration ?? row.acceleration ?? row.acc_mag_peak ?? 0;
   const timestamp = row.timestamp ?? row.timestamp_start;
 
   return {
-    device_id: row.device_id,
-    event_id: `evt_${row.id ?? timestamp}`,
-    event_type: row.event === 2 ? 'near_fall' : 'fall',
+    device_id:   row.device_id,
+    event_id:    `evt_${row.id ?? timestamp}`,
+    event_type:  row.event === 2 ? 'near_fall' : 'fall',
     timestamp_start: timestamp,
-    timestamp_peak: timestamp + 3,
-    timestamp_end: timestamp + 6,
+    timestamp_peak:  timestamp + 3,
+    timestamp_end:   timestamp + 6,
     risk_score: row.risk_score != null ? parseFloat(row.risk_score) : null,
     cause_hint:
       angle > 60 ? 'mechanical_instability'
@@ -103,11 +112,11 @@ export function mapToFallEvent(row) {
       angle > 70 ? 'on_ground'
       : angle > 45 ? 'assisted_recovery'
       : 'recovered_standing',
-    hr: row.biometric?.heart_rate ?? row.heart_rate ?? row.hr ?? null,
+    hr:   row.biometric?.heart_rate ?? row.heart_rate ?? row.hr ?? null,
     spo2: row.biometric?.spo2 ?? row.spo2 ?? null,
-    hrv: row.biometric?.hrv ?? row.hrv ?? null,
-    emg_rms_peak: row.physics?.emg ?? row.emg ?? row.emg_rms_peak ?? null,
-    acc_mag_peak: row.physics?.acceleration ?? row.acceleration ?? row.acc_mag_peak ?? null,
+    hrv:  row.biometric?.hrv  ?? row.hrv  ?? null,
+    emg_rms_peak:    row.raw_data?.emg_rms ?? row.physics?.emg         ?? row.emg         ?? row.emg_rms_peak    ?? null,
+    acc_mag_peak:    row.raw_data?.acc_g   ?? row.physics?.acceleration ?? row.acceleration ?? row.acc_mag_peak   ?? null,
     tilt_angle_peak: angle,
     alert_triggered: true,
   };

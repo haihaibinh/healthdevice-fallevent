@@ -543,7 +543,7 @@
   transform: translateX(-50%);
   width: min(480px, calc(100vw - 24px));
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 8px;
   padding: 10px;
   border: 1px solid rgba(148, 163, 184, 0.16);
