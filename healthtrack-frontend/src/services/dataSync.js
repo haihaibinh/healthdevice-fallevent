@@ -23,12 +23,15 @@ class DataSync {
         try {
           const parsed = JSON.parse(event.data);
           const raw = parsed?.data ?? parsed;
-          if (!raw || raw.device_id !== deviceId) return;
+
+          // Bỏ filter device_id vì WS gửi string "health_device"
+          // còn deviceId từ DB là số nguyên — không bao giờ bằng nhau
+          if (!raw) return;
 
           const normalData = mapToFrontend(raw);
           this._callbacks[deviceId]?.onNormal?.(normalData);
 
-          if (raw.event === 1 || raw.event === 2) {
+          if (raw.event === 1 || raw.event === 2 || raw.inference?.fall_detected === 1) {
             this._callbacks[deviceId]?.onFallEvent?.(mapToFallEvent(raw));
           }
         } catch (err) {

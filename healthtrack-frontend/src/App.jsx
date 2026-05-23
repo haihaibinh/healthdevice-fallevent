@@ -3,7 +3,6 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import './App.css';
 import { DeviceProvider } from './contexts/DeviceContext';
 import { COLORS, ROUTES } from './constants/theme';
-import DevicePage from './pages/device';
 import DashboardPage from './pages/dashboard';
 import StatsPage from './pages/stats';
 import { registerToast } from './utils/toast';
@@ -49,7 +48,6 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
-      <Route path={ROUTES.DEVICE} element={<DevicePage />} />
       <Route path="/stats" element={<StatsPage />} />
       <Route path="*" element={<Navigate to={ROUTES.DASHBOARD} replace />} />
     </Routes>
