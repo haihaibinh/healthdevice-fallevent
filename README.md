@@ -60,4 +60,6 @@ Truy cập giao diện tại: `http://localhost:5173`
 *Chi tiết cụ thể về từng phần có thể tìm thấy trong thư mục con tương ứng:*
 - [Tài liệu Backend](./healthtrack-backend/README.md)
 - [Tài liệu Frontend](./healthtrack-frontend/README.md)
+### 4. Thiết kế node MPU
+- Node MPU được thiết kế sử dụng ESP32C3, MPU6050, mạch sạc TP4056 và Pin 3.7v được thiết kế như sau:
 <img width="1322" height="920" alt="image" src="https://github.com/user-attachments/assets/29d290c6-04b0-4261-ace8-3a3f5394ccd8" />
