@@ -1,297 +1,366 @@
 #include <Wire.h>
-#include <MPU6050.h>
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEAdvertising.h>
-#include <BLEUtils.h>
-#include <BLE2902.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
 #include <math.h>
-#include <string.h>
-#include <esp_bt.h>
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <PubSubClient.h>
 
-// ======================================================
-// NODE 1: MPU6050 -> BLE -> NODE 2
-// Board: ESP32-C3 / ESP32-S3
-// Role: BLE Server, chi gui du lieu MPU cho Node 2
-// ======================================================
+// File model được xuất từ micromlgen
+#include "fall_rf_model1.h"
+Eloquent::ML::Port::RandomForest model;
+Adafruit_MPU6050 mpu;
 
-// ===================== PINS =====================
-#define PIN_SDA 8
-#define PIN_SCL 9
+// =====================================================
+// CẤU HÌNH WIFI & MQTT HIVEMQ CLOUD
+// =====================================================
+const char* WIFI_SSID = "BaAnhDepTrai";
+const char* WIFI_PASS = "Hoilamgi";
 
-// ===================== BLE UART-LIKE SERVICE =====================
-#define NODE1_BLE_NAME "HealthNode1_MPU"
-#define BLE_SERVICE_UUID "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
-#define BLE_NODE1_TX_UUID "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
+#define MQTT_HOST "3c42211a3c8f4decbdf20c41e2b72fcf.s1.eu.hivemq.cloud"
+#define MQTT_USER "esp32_health_device"
+#define MQTT_PASS "Sa123456"
+#define MQTT_PORT 8883
+#define MQTT_TOPIC "health/device/node2"
+#define MQTT_CLIENT_ID_PREFIX "esp32_health_device_node2_"
+#define DEVICE_ID "health_device"
 
-// ===================== TASK INTERVALS =====================
-#define MPU_SAMPLE_INTERVAL_MS 50UL
-#define BLE_SEND_INTERVAL_MS 200UL
-#define SERIAL_LOG_INTERVAL_MS 1000UL
+WiFiClientSecure espClient;
+PubSubClient mqttClient(espClient);
 
-// ===================== MPU PROCESSING =====================
-#define MPU_LPF_ALPHA 0.30f
+unsigned long lastReconnectAttempt = 0;
+uint32_t msg_seq = 0;
+int mpu_status = 0; // 1 = OK, 0 = Error
 
-// ===================== EVENT STATES =====================
-#define EVENT_NONE 0
-#define EVENT_FALL 1
-#define EVENT_NEAR_FALL 2
+// =====================================================
+// CẤU HÌNH HỆ THỐNG
+// =====================================================
+const int FS = 238;
+const int SAMPLE_INTERVAL_US = 1000000UL / FS;
+const float WINDOW_SEC = 2.0f;
+const int WINDOW_SIZE = (int)(FS * WINDOW_SEC);  // 476 mẫu
+const int PREDICT_STEP = WINDOW_SIZE / 2;        // overlap 50%
 
-// Packet BLE nho gon: Node 1 chi gui MPU.
-typedef struct __attribute__((packed)) {
-  uint16_t magic;       // 0xBEEF
-  uint16_t seq;         // sequence number
-  int16_t acc_mg;       // acceleration * 1000. Vi du 1.023g -> 1023
-  int16_t angle_cdeg;   // angle * 100. Vi du 45.23 deg -> 4523
-  uint8_t event;        // 0 none, 1 fall, 2 near fall
-  uint8_t mpu_ok;       // 1 ok, 0 fail
-  uint16_t reserved;    // reserved
-  uint16_t checksum;    // checksum simple sum bytes tru field checksum
-} Node1Packet;
+const float ACC_SCALE = 1.0f / 0.000244f;   // ≈ 4098.36
+const float GYRO_SCALE = 57.2958f / 0.07f;  // ≈ 818.51
 
-static_assert(sizeof(Node1Packet) == 14, "Node1Packet must be exactly 14 bytes");
+// =====================================================
+// BUFFER DỮ LIỆU
+// =====================================================
+float ax_buf[WINDOW_SIZE];
+float ay_buf[WINDOW_SIZE];
+float az_buf[WINDOW_SIZE];
 
-MPU6050 mpu;
-BLEServer *bleServer = nullptr;
-BLECharacteristic *node1TxChar = nullptr;
+float gx_buf[WINDOW_SIZE];
+float gy_buf[WINDOW_SIZE];
+float gz_buf[WINDOW_SIZE];
 
-bool bleDeviceConnected = false;
-bool bleOldDeviceConnected = false;
-bool mpuSensorOK = false;
-bool motionFilterInitialized = false;
+int buf_index = 0;
+unsigned long sample_count = 0;
+unsigned long last_sample_time = 0;
 
-float latestAccMag = -1.0f;
-float latestAngle = -1.0f;
+// =====================================================
+// HÀM TÍNH STD CHO BUFFER VÒNG
+// =====================================================
+float calculateStdRing(float* buf, float mean) {
+  float variance = 0;
 
-uint8_t currentEvent = EVENT_NONE;
-unsigned long latestEventTimestamp = 0;
-bool hasEventBefore = false;
-uint16_t packetSeq = 0;
-
-unsigned long lastMpuSampleMs = 0;
-unsigned long lastBleSendMs = 0;
-unsigned long lastSerialLogMs = 0;
-
-static void setupBLE();
-static void sampleMotion();
-static void updateEventHeuristics();
-static void sendNode1Packet();
-static uint16_t computeChecksum(const Node1Packet &packet);
-static float calcTiltAngle(int16_t ax, int16_t ay, int16_t az);
-static float calcAccMag(int16_t ax, int16_t ay, int16_t az);
-static float constrainFloat(float value, float minValue, float maxValue);
-
-class Node1ServerCallbacks : public BLEServerCallbacks {
-  void onConnect(BLEServer *server) override {
-    bleDeviceConnected = true;
-    Serial.println("[BLE] Node 2 connected");
+  for (int i = 0; i < WINDOW_SIZE; i++) {
+    int idx = (buf_index + i) % WINDOW_SIZE;
+    float d = buf[idx] - mean;
+    variance += d * d;
   }
 
-  void onDisconnect(BLEServer *server) override {
-    bleDeviceConnected = false;
-    Serial.println("[BLE] Node 2 disconnected");
-  }
-};
+  return sqrtf(variance / WINDOW_SIZE);
+}
 
+// =====================================================
+// TRÍCH XUẤT 22 FEATURES TỪ 1 CẢM BIẾN (3 TRỤC)
+// =====================================================
+void extractSensorFeatures(float* xbuf,
+                           float* ybuf,
+                           float* zbuf,
+                           float* out,
+                           int& f_idx) {
+
+  float sum_x = 0, sum_y = 0, sum_z = 0;
+  float max_x = -1e9, max_y = -1e9, max_z = -1e9;
+  float min_x = 1e9, min_y = 1e9, min_z = 1e9;
+
+  int zc_x = 0, zc_y = 0, zc_z = 0;
+
+  float diff_x = 0, diff_y = 0, diff_z = 0;
+
+  float sma = 0;
+
+  float sum_mag = 0;
+  float max_mag = -1e9;
+  static float mag[WINDOW_SIZE];
+
+  // -------------------------------------------------
+  // Duyệt toàn bộ cửa sổ
+  // -------------------------------------------------
+  for (int i = 0; i < WINDOW_SIZE; i++) {
+    int idx = (buf_index + i) % WINDOW_SIZE;
+
+    float x = xbuf[idx];
+    float y = ybuf[idx];
+    float z = zbuf[idx];
+
+    // mean
+    sum_x += x;
+    sum_y += y;
+    sum_z += z;
+
+    // max/min
+    if (x > max_x) max_x = x;
+    if (x < min_x) min_x = x;
+
+    if (y > max_y) max_y = y;
+    if (y < min_y) min_y = y;
+
+    if (z > max_z) max_z = z;
+    if (z < min_z) min_z = z;
+
+    // zero crossing + diff
+    if (i > 0) {
+      int prev_idx = (buf_index + i - 1) % WINDOW_SIZE;
+
+      float px = xbuf[prev_idx];
+      float py = ybuf[prev_idx];
+      float pz = zbuf[prev_idx];
+
+      if ((x > 0 && px <= 0) || (x < 0 && px >= 0)) zc_x++;
+      if ((y > 0 && py <= 0) || (y < 0 && py >= 0)) zc_y++;
+      if ((z > 0 && pz <= 0) || (z < 0 && pz >= 0)) zc_z++;
+
+      diff_x += fabsf(x - px);
+      diff_y += fabsf(y - py);
+      diff_z += fabsf(z - pz);
+    }
+
+    // SMA
+    sma += fabsf(x) + fabsf(y) + fabsf(z);
+
+    // magnitude
+    float m = sqrtf(x * x + y * y + z * z);
+    mag[i] = m;
+    sum_mag += m;
+    if (m > max_mag) max_mag = m;
+  }
+
+  // -------------------------------------------------
+  // Mean
+  // -------------------------------------------------
+  float mean_x = sum_x / WINDOW_SIZE;
+  float mean_y = sum_y / WINDOW_SIZE;
+  float mean_z = sum_z / WINDOW_SIZE;
+
+  // Std
+  float std_x = calculateStdRing(xbuf, mean_x);
+  float std_y = calculateStdRing(ybuf, mean_y);
+  float std_z = calculateStdRing(zbuf, mean_z);
+
+  // Mean abs diff
+  diff_x /= (WINDOW_SIZE - 1);
+  diff_y /= (WINDOW_SIZE - 1);
+  diff_z /= (WINDOW_SIZE - 1);
+
+  // Magnitude stats
+  float mean_mag = sum_mag / WINDOW_SIZE;
+
+  float var_mag = 0;
+  for (int i = 0; i < WINDOW_SIZE; i++) {
+    float d = mag[i] - mean_mag;
+    var_mag += d * d;
+  }
+  float std_mag = sqrtf(var_mag / WINDOW_SIZE);
+
+  // -------------------------------------------------
+  // Trục X
+  // -------------------------------------------------
+  out[f_idx++] = mean_x;
+  out[f_idx++] = std_x;
+  out[f_idx++] = max_x;
+  out[f_idx++] = min_x;
+  out[f_idx++] = (float)zc_x;
+  out[f_idx++] = diff_x;
+
+  // Trục Y
+  out[f_idx++] = mean_y;
+  out[f_idx++] = std_y;
+  out[f_idx++] = max_y;
+  out[f_idx++] = min_y;
+  out[f_idx++] = (float)zc_y;
+  out[f_idx++] = diff_y;
+
+  // Trục Z
+  out[f_idx++] = mean_z;
+  out[f_idx++] = std_z;
+  out[f_idx++] = max_z;
+  out[f_idx++] = min_z;
+  out[f_idx++] = (float)zc_z;
+  out[f_idx++] = diff_z;
+
+  // SMA + Magnitude
+  out[f_idx++] = sma;
+  out[f_idx++] = max_mag;
+  out[f_idx++] = mean_mag;
+  out[f_idx++] = std_mag;
+}
+
+// =====================================================
+// TRÍCH XUẤT TỔNG 44 FEATURES
+// =====================================================
+void extractFeatures(float* features) {
+  int f_idx = 0;
+
+  // 22 features từ Accelerometer
+  extractSensorFeatures(ax_buf, ay_buf, az_buf, features, f_idx);
+
+  // 22 features từ Gyroscope
+  extractSensorFeatures(gx_buf, gy_buf, gz_buf, features, f_idx);
+}
+
+// =====================================================
+// SETUP
+// =====================================================
 void setup() {
   Serial.begin(115200);
-  delay(800);
+  delay(1000);
 
-  Serial.println();
-  Serial.println("=== NODE 1: MPU6050 -> BLE ===");
+  Serial.println("Khoi dong he thong phat hien nga...");
 
-  Wire.begin(PIN_SDA, PIN_SCL);
-  delay(200);
-
-  mpu.initialize();
-  mpuSensorOK = mpu.testConnection();
-
-  Serial.println(mpuSensorOK ? "[MPU] OK" : "[MPU] FAIL");
-  if (!mpuSensorOK) {
-    Serial.println("[MPU] Check SDA/SCL/VCC/GND and I2C address");
-  }
-
-  setupBLE();
-
-  Serial.println("[SYSTEM] Node 1 ready");
-}
-
-void loop() {
-  const unsigned long now = millis();
-
-  if (now - lastMpuSampleMs >= MPU_SAMPLE_INTERVAL_MS) {
-    lastMpuSampleMs = now;
-    sampleMotion();
-    updateEventHeuristics();
-  }
-
-  if (now - lastBleSendMs >= BLE_SEND_INTERVAL_MS) {
-    lastBleSendMs = now;
-    sendNode1Packet();
-  }
-
-  if (now - lastSerialLogMs >= SERIAL_LOG_INTERVAL_MS) {
-    lastSerialLogMs = now;
-
-    Serial.printf(
-      "[NODE1] ble=%d | mpu=%d | acc=%.3f | angle=%.2f | event=%d | seq=%u\n",
-      bleDeviceConnected,
-      mpuSensorOK,
-      latestAccMag,
-      latestAngle,
-      currentEvent,
-      packetSeq
-    );
-  }
-
-  if (!bleDeviceConnected && bleOldDeviceConnected) {
+  // 1. Khởi tạo WiFi
+  Serial.print("Ket noi WiFi...");
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    bleServer->startAdvertising();
-    Serial.println("[BLE] Restart advertising");
-    bleOldDeviceConnected = bleDeviceConnected;
+    Serial.print(".");
   }
+  Serial.println("\nWiFi ket noi thanh cong!");
 
-  if (bleDeviceConnected && !bleOldDeviceConnected) {
-    bleOldDeviceConnected = bleDeviceConnected;
+  // 2. Cấu hình MQTT Secure
+  espClient.setInsecure(); // Bỏ qua xác thực chứng chỉ SSL để kết nối nhanh hơn
+  mqttClient.setServer(MQTT_HOST, MQTT_PORT);
+
+  // 3. Khởi tạo MPU6050
+  Wire.begin(8, 9);
+  if (!mpu.begin()) {
+    Serial.println("Khong tim thay MPU6050!");
+    mpu_status = 0;
+    while (1) delay(1000); // Có thể bỏ while(1) nếu muốn ESP vẫn chạy MQTT báo lỗi
   }
+  mpu_status = 1;
+  
+  mpu.setAccelerometerRange(MPU6050_RANGE_4_G);
+  mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+  mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+
+  Serial.println("MPU6050 san sang.");
 }
 
-static void setupBLE() {
-  BLEDevice::init(NODE1_BLE_NAME);
-  BLEDevice::setPower(ESP_PWR_LVL_P9);
-
-  bleServer = BLEDevice::createServer();
-  bleServer->setCallbacks(new Node1ServerCallbacks());
-
-  BLEService *service = bleServer->createService(BLEUUID(BLE_SERVICE_UUID));
-
-  node1TxChar = service->createCharacteristic(
-    BLEUUID(BLE_NODE1_TX_UUID),
-    BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_READ
-  );
-
-  node1TxChar->addDescriptor(new BLE2902());
-
-  service->start();
-
-  BLEAdvertising *advertising = BLEDevice::getAdvertising();
-  advertising->addServiceUUID(BLEUUID(BLE_SERVICE_UUID));
-  advertising->setScanResponse(true);
-  advertising->setMinPreferred(0x06);
-  advertising->setMinPreferred(0x12);
-
-  bleServer->getAdvertising()->start();
-
-  Serial.println("[BLE] Advertising as HealthNode1_MPU");
-}
-
-static void sampleMotion() {
-  if (!mpuSensorOK) {
-    latestAccMag = -1.0f;
-    latestAngle = -1.0f;
-    return;
-  }
-
-  int16_t ax, ay, az, gx, gy, gz;
-  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
-
-  const float acc = calcAccMag(ax, ay, az);
-  const float angle = calcTiltAngle(ax, ay, az);
-
-  if (!motionFilterInitialized) {
-    latestAccMag = acc;
-    latestAngle = angle;
-    motionFilterInitialized = true;
+// =====================================================
+// KẾT NỐI LẠI MQTT (NON-BLOCKING)
+// =====================================================
+void handleMQTT() {
+  if (!mqttClient.connected()) {
+    unsigned long nowMillis = millis();
+    // Thử kết nối lại mỗi 5 giây để không treo loop()
+    if (nowMillis - lastReconnectAttempt > 5000) {
+      lastReconnectAttempt = nowMillis;
+      Serial.print("Dang ket noi lai MQTT...");
+      
+      String clientId = String(MQTT_CLIENT_ID_PREFIX) + String(random(0xffff), HEX);
+      if (mqttClient.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
+        Serial.println(" Thanh cong!");
+      } else {
+        Serial.print(" That bai, rc=");
+        Serial.println(mqttClient.state());
+      }
+    }
   } else {
-    latestAccMag = MPU_LPF_ALPHA * acc + (1.0f - MPU_LPF_ALPHA) * latestAccMag;
-    latestAngle = MPU_LPF_ALPHA * angle + (1.0f - MPU_LPF_ALPHA) * latestAngle;
+    mqttClient.loop();
   }
 }
 
-static void updateEventHeuristics() {
-  if (!mpuSensorOK || latestAccMag < 0.0f || latestAngle < 0.0f) {
-    currentEvent = EVENT_NONE;
-    return;
+// =====================================================
+// LOOP CHÍNH
+// =====================================================
+void loop() {
+  // Duy trì kết nối MQTT
+  handleMQTT();
+
+  unsigned long now = micros();
+
+  // Lấy mẫu đúng tần số 238 Hz
+  if (now - last_sample_time >= SAMPLE_INTERVAL_US) {
+    last_sample_time = now;
+
+    sensors_event_t a, g, temp;
+    mpu.getEvent(&a, &g, &temp);
+
+    // Accelerometer -> raw counts
+    ax_buf[buf_index] = a.acceleration.x / 9.81f * ACC_SCALE;
+    ay_buf[buf_index] = a.acceleration.y / 9.81f * ACC_SCALE;
+    az_buf[buf_index] = a.acceleration.z / 9.81f * ACC_SCALE;
+
+    // Gyroscope -> raw counts
+    gx_buf[buf_index] = g.gyro.x * GYRO_SCALE;
+    gy_buf[buf_index] = g.gyro.y * GYRO_SCALE;
+    gz_buf[buf_index] = g.gyro.z * GYRO_SCALE;
+    
+    // Cập nhật buffer vòng
+    buf_index = (buf_index + 1) % WINDOW_SIZE;
+    sample_count++;
+
+    // Khi đã đủ dữ liệu và tới thời điểm dự đoán
+    if (sample_count >= WINDOW_SIZE && (sample_count % PREDICT_STEP == 0)) {
+
+      static float features[44];
+      extractFeatures(features);
+
+      // Tính max magnitude (dạng G chuẩn thay vì raw counts để gửi MQTT)
+      float max_mag_raw = 0;
+      for (int i = 0; i < WINDOW_SIZE; i++) {
+        float m = sqrtf(ax_buf[i] * ax_buf[i] + ay_buf[i] * ay_buf[i] + az_buf[i] * az_buf[i]);
+        if (m > max_mag_raw) max_mag_raw = m;
+      }
+      float acc_g = max_mag_raw / ACC_SCALE; 
+
+      // Tính góc nghiêng (Angle) dựa trên vector gia tốc mẫu cuối cùng
+      int last_idx = (buf_index == 0) ? (WINDOW_SIZE - 1) : (buf_index - 1);
+      float last_x = ax_buf[last_idx] / ACC_SCALE;
+      float last_y = ay_buf[last_idx] / ACC_SCALE;
+      float last_z = az_buf[last_idx] / ACC_SCALE;
+      float r = sqrtf(last_x*last_x + last_y*last_y + last_z*last_z);
+      float angle = (r == 0) ? 0.0f : (acos(last_z / r) * 180.0f / PI);
+
+      // Thời gian suy luận
+      int prediction = model.predict(features);
+
+      // Xác nhận ngã sau 2 lần liên tiếp
+      static int fall_count = 0;
+      if (prediction == 2) fall_count++;
+      else fall_count = 0;
+
+      int event_status = prediction;
+      if (fall_count >= 2) {
+        event_status = 2; // Cứng hóa event ngã
+        Serial.println("!!! XAC NHAN DA NGA !!!");
+      }
+
+      // Đóng gói và gửi MQTT nếu đang kết nối
+      if (mqttClient.connected()) {
+        char payload[128];
+        // Format: | mpu=%d | acc=%.3f | angle=%.2f | event=%d | seq=%u\n
+        snprintf(payload, sizeof(payload), "| mpu=%d | acc=%.3f | angle=%.2f | event=%d | seq=%u\n", 
+                 mpu_status, acc_g, angle, event_status, msg_seq++);
+                 
+        mqttClient.publish(MQTT_TOPIC, payload);
+        Serial.print("Đã gửi MQTT: ");
+        Serial.print(payload); // Ký tự \n đã có sẵn trong payload
+      }
+    }
   }
-
-  const bool strongImpact = latestAccMag >= 2.50f;
-  const bool possibleFreeFall = latestAccMag <= 0.45f;
-  const bool largeTilt = latestAngle >= 60.0f;
-
-  uint8_t detectedEvent = EVENT_NONE;
-
-  if (strongImpact && largeTilt) {
-    detectedEvent = EVENT_FALL;
-  } else if (strongImpact || possibleFreeFall || largeTilt) {
-    detectedEvent = EVENT_NEAR_FALL;
-  }
-
-  if (detectedEvent != EVENT_NONE) {
-    currentEvent = detectedEvent;
-    latestEventTimestamp = millis();
-    hasEventBefore = true;
-  } else if (hasEventBefore && millis() - latestEventTimestamp < 1500UL) {
-    // Giu event them mot chut de Node 2 kip publish.
-  } else {
-    currentEvent = EVENT_NONE;
-  }
-}
-
-static void sendNode1Packet() {
-  if (!bleDeviceConnected || node1TxChar == nullptr) return;
-
-  Node1Packet packet;
-  memset(&packet, 0, sizeof(packet));
-
-  packet.magic = 0xBEEF;
-  packet.seq = packetSeq++;
-  packet.acc_mg = latestAccMag >= 0.0f ? (int16_t)round(constrainFloat(latestAccMag, 0.0f, 8.0f) * 1000.0f) : -1;
-  packet.angle_cdeg = latestAngle >= 0.0f ? (int16_t)round(constrainFloat(latestAngle, 0.0f, 180.0f) * 100.0f) : -1;
-  packet.event = currentEvent;
-  packet.mpu_ok = mpuSensorOK ? 1 : 0;
-  packet.reserved = 0;
-  packet.checksum = computeChecksum(packet);
-
-  node1TxChar->setValue((uint8_t *)&packet, sizeof(packet));
-  node1TxChar->notify();
-}
-
-static uint16_t computeChecksum(const Node1Packet &packet) {
-  const uint8_t *bytes = (const uint8_t *)&packet;
-  uint16_t sum = 0;
-
-  for (size_t i = 0; i < sizeof(Node1Packet) - sizeof(packet.checksum); i++) {
-    sum += bytes[i];
-  }
-
-  return sum;
-}
-
-static float calcTiltAngle(int16_t ax, int16_t ay, int16_t az) {
-  const float fax = (float)ax;
-  const float fay = (float)ay;
-  const float faz = (float)az;
-
-  const float denominator = sqrtf(fax * fax + fay * fay + faz * faz);
-  if (denominator <= 0.001f) return -1.0f;
-
-  float cosTheta = faz / denominator;
-  cosTheta = constrainFloat(cosTheta, -1.0f, 1.0f);
-
-  return acosf(cosTheta) * 180.0f / PI;
-}
-
-static float calcAccMag(int16_t ax, int16_t ay, int16_t az) {
-  const float scale = 16384.0f; // MPU6050 default +-2g
-  const float gx = (float)ax / scale;
-  const float gy = (float)ay / scale;
-  const float gz = (float)az / scale;
-
-  return sqrtf(gx * gx + gy * gy + gz * gz);
-}
-
-static float constrainFloat(float value, float minValue, float maxValue) {
-  if (value < minValue) return minValue;
-  if (value > maxValue) return maxValue;
-  return value;
 }
