@@ -6,8 +6,8 @@
 // ============================================================
 // CẤU HÌNH
 // ============================================================
-#define WIFI_SSID            "Đại Như"
-#define WIFI_PASSWORD        "18012005"
+#define WIFI_SSID            "Ban"
+#define WIFI_PASSWORD        "14072005"
 
 #define MQTT_SERVER          "broker.hivemq.com"
 #define MQTT_PORT            1883
@@ -87,6 +87,8 @@ static void setupWiFi() {
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
+    Serial.print(" status=");
+    Serial.print(WiFi.status());
   }
   Serial.println();
   Serial.println("[INFO] WiFi Connected!");

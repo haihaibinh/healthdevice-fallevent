@@ -57,10 +57,10 @@ CSV_PATH = os.path.join(save_dir, f"{activity}_{trial:02d}.csv")
 # OPEN CSV
 # ==========================================
 csv_file = open(CSV_PATH, "w", newline="", encoding="utf-8")
-writer = csv.writer(csv_file)
+writer = csv.writer(csv_file, delimiter=";")
 
 writer.writerow([
-    "timestamp", "subject_id", "activity", "label", 
+    "timestamp", "subject_id", "activity", "label",
     "seq", "ax", "ay", "az", "gx", "gy", "gz"
 ])
 
@@ -151,7 +151,7 @@ def on_message(client, userdata, msg):
     sample_count += SAMPLES_PER_PACKET
 
     # IN TRẠNG THÁI
-    if packet_count % 10 == 0:
+    if packet_count % 2 == 0:
         elapsed = time.time() - start_time
         print(f"[RX] Packets={packet_count} | Samples={sample_count} | Lost={lost_packet_count} | Time={elapsed:.1f}s")
 
