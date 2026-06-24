@@ -44,6 +44,13 @@ static const int  DST_OFF_SEC   = 0;
 #define I2C_SDA              8
 #define I2C_SCL              9
 #define I2C_FREQ_HZ          400000
+#define BAT_ADC_PIN     0    // Chân GPIO 0 theo code của bạn
+#define ADC_RESOLUTION  4095.0f
+#define ADC_VREF        3.3f
+#define DIVIDER_RATIO   2.0f // Cầu phân áp 2 trở 100k
+#define BAT_MAX_V       4.2f
+#define BAT_MIN_V       3.0f
+#define ADC_SAMPLES     64
 
 static const float ACC_LSB = 4096.0f;   // LSB/g   cho +-8g
 static const float GYR_LSB = 65.536f;   // LSB/(deg/s) cho +-500deg/s
@@ -75,6 +82,23 @@ static bool readMPU(Sample &s) {
     s.gy = read16();
     s.gz = read16();
     return true;
+}
+
+static float readBatteryVoltage() {
+  long sum = 0;
+  for (int i = 0; i < ADC_SAMPLES; i++) {
+    sum += analogRead(BAT_ADC_PIN);
+    delayMicroseconds(100);
+  }
+  float v_adc = ((float)sum / ADC_SAMPLES / ADC_RESOLUTION) * ADC_VREF;
+  return v_adc * DIVIDER_RATIO;
+}
+
+static int getBatteryPercentage(float &out_voltage) {
+  out_voltage = readBatteryVoltage();
+  if (out_voltage >= BAT_MAX_V) return 100;
+  if (out_voltage <= BAT_MIN_V) return 0;
+  return (int)((out_voltage - BAT_MIN_V) / (BAT_MAX_V - BAT_MIN_V) * 100.0f);
 }
 
 // ============================================================
@@ -340,6 +364,9 @@ static void build_features(float* f) {
 void setup(void) {
     Serial.begin(115200);
     delay(200);
+    analogReadResolution(12);
+    analogSetAttenuation(ADC_11db);
+    pinMode(BAT_ADC_PIN, INPUT);
     Serial.println("\n=== Fall Detection ESP32 C3 Mini ===");
 
     Wire.begin(I2C_SDA, I2C_SCL);
@@ -425,21 +452,30 @@ void loop(void) {
 
     if (!mqttClient.connected()) return;
 
-    StaticJsonDocument<384> doc;
+    // --- GỌI HÀM ĐỌC PIN ---
+    float current_voltage = 0.0f;
+    int battery_pct = getBatteryPercentage(current_voltage);
+
+    // --- ĐÓNG GÓI JSON ---
+    StaticJsonDocument<512> doc;
     doc["device_id"]     = DEVICE_ID;
     doc["timestamp"]     = getTimestamp();
     doc["seq"]           = msg_seq++;
     doc["mpu_status"]    = mpu_ok;
+    doc["battery_pct"]   = battery_pct;
+    doc["voltage"]       = serialized(String(current_voltage, 2));
     doc["prediction"]    = pred;
     doc["event"]         = label;
-    doc["battery_node2"] = (char*)nullptr;
-    doc["risk_score"]    = (char*)nullptr;
 
-    JsonObject phy      = doc.createNestedObject("physics");
-    phy["acceleration"] = (float)((int)(acc_mag * 100.0f)) / 100.0f;
-    phy["angle"]        = (float)((int)(angle   *  10.0f)) /  10.0f;
+    // Các trục tọa độ để vẽ lên biểu đồ line chart
+    JsonObject phy       = doc.createNestedObject("physics");
+    phy["acc_mag"]       = (float)((int)(acc_mag * 100.0f)) / 100.0f;
+    phy["angle"]         = (float)((int)(angle   * 10.0f)) /  10.0f;
+    phy["ax_g"]          = (float)((int)(lx * 100.0f)) / 100.0f;
+    phy["ay_g"]          = (float)((int)(ly * 100.0f)) / 100.0f;
+    phy["az_g"]          = (float)((int)(lz * 100.0f)) / 100.0f;
 
-    char jbuf[384];
+    char jbuf[512];
     serializeJson(doc, jbuf);
 
     if (mqttClient.publish(MQTT_TOPIC, jbuf))
