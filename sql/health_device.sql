@@ -1,47 +1,39 @@
+DROP TABLE IF EXISTS sensor_data CASCADE;
+
 CREATE TABLE sensor_data (
     id SERIAL PRIMARY KEY,
 
     device_id VARCHAR(50) NOT NULL,
     timestamp BIGINT NOT NULL,
 
-    battery_node1 INT,
-    battery_node2 INT,
+    seq INT,
+    mpu_status BOOLEAN,
+    battery_pct INT,
+    voltage REAL,
+    prediction INT,
+    event VARCHAR(50),
 
-    emg INT,
-    acceleration INT,
-    angle INT,
-
-    heart_rate INT,
-    spo2 INT,
-    hrv INT,
-
-    risk_score FLOAT,
-    event INT
+    acc_mag REAL,
+    angle REAL,
+    ax_g REAL,
+    ay_g REAL,
+    az_g REAL
 );
+
 CREATE INDEX idx_device_time 
 ON sensor_data(device_id, timestamp DESC);
+
 INSERT INTO sensor_data (
-    device_id, timestamp,
-    battery_node1, battery_node2,
-    emg, acceleration, angle,
-    heart_rate, spo2, hrv,
-    risk_score, event
+    device_id, timestamp, seq, mpu_status,
+    battery_pct, voltage, prediction, event,
+    acc_mag, angle, ax_g, ay_g, az_g
 )
 VALUES (
-    'health_device', 1710000005,
-    78, 66,
-    120, 120, 120,
-    110, 92, 20,
-    0.89, 1
+    'health_device', 1710000005, 1, true,
+    85, 4.15, 0, 'Normal',
+    1.00, 15.0, 0.0, 0.0, 1.0
 );
-SELECT current_database(), current_schema();
-ALTER TABLE sensor_data
-  ALTER COLUMN acceleration TYPE REAL,
-  ALTER COLUMN emg          TYPE REAL,
-  ALTER COLUMN angle        TYPE REAL,
-  ALTER COLUMN heart_rate   TYPE REAL,
-  ALTER COLUMN spo2         TYPE REAL,
-  ALTER COLUMN hrv          TYPE REAL,
-  ALTER COLUMN risk_score   TYPE REAL;
 
- SELECT * FROM sensor_data ORDER BY id DESC LIMIT 10;
+SELECT current_database(), current_schema();
+
+SELECT * FROM sensor_data ORDER BY id DESC LIMIT 10;

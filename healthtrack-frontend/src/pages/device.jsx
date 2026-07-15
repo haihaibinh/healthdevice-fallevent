@@ -10,7 +10,7 @@ const SETTINGS = [
   {
     key: 'notifications',
     title: 'Health notifications',
-    description: 'Alert for heart rate, oxygen, and fall-risk changes.',
+    description: 'Alert for fall-risk and posture changes.',
   },
   {
     key: 'realtimeMode',

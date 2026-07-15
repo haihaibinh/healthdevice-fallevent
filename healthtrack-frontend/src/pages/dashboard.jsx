@@ -5,63 +5,40 @@ import { useDevice } from '../contexts/DeviceContext';
 import { useSensorData } from '../hooks/useSensorData';
 
 const ACTIVITY_LABELS = {
-  walking: { label: 'Di bo', color: COLORS.primary },
-  standing: { label: 'Dung', color: COLORS.success },
-  sitting: { label: 'Ngoi', color: COLORS.textSecondary },
-  running: { label: 'Chay', color: COLORS.warning },
-  fall: { label: 'Te nga', color: COLORS.danger },
-  near_fall: { label: 'Suyt nga', color: COLORS.warning },
+  walking: { label: 'Đi bộ', color: COLORS.primary },
+  standing: { label: 'Bình thường', color: COLORS.success },
+  sitting: { label: 'Ngồi', color: COLORS.textSecondary },
+  running: { label: 'Chạy', color: COLORS.warning },
+  fall: { label: 'Té ngã', color: COLORS.danger },
+  near_fall: { label: 'Suýt ngã', color: COLORS.warning },
 };
 
 const EVENT_TYPE_LABELS = {
-  near_fall: { label: 'Suyt nga', color: COLORS.warning },
-  fall: { label: 'Te nga', color: COLORS.danger },
+  near_fall: { label: 'Suýt ngã', color: COLORS.warning },
+  fall: { label: 'Té ngã', color: COLORS.danger },
 };
 
 const CAUSE_LABELS = {
-  mechanical_instability: 'Mat on dinh co hoc',
-  sudden_acceleration: 'Gia toc dot ngot',
-  loss_of_balance: 'Mat thang bang',
+  mechanical_instability: 'Mất ổn định cơ học',
+  sudden_acceleration: 'Gia tốc đột ngột',
+  loss_of_balance: 'Mất thăng bằng',
 };
 
 const POSTURE_LABELS = {
-  recovered_standing: 'Da tu phuc hoi',
-  on_ground: 'Nam duoi san',
-  assisted_recovery: 'Duoc ho tro phuc hoi',
+  on_ground: 'Nằm dưới sàn',
+  assisted_recovery: 'Được hỗ trợ phục hồi',
 };
 
-function getRiskLevel(score) {
-  if (score == null) return { label: 'No data', color: COLORS.textMuted };
-  if (score < 0.4) return { label: 'Low risk', color: COLORS.success };
-  if (score < 0.7) return { label: 'Watch closely', color: COLORS.warning };
-  return { label: 'High risk', color: COLORS.danger };
-}
-
-function getHeartRateStatus(hr) {
-  if (hr == null) return 'No signal';
-  if (hr < 60) return 'Below baseline';
-  if (hr <= 100) return 'Stable';
-  if (hr <= 120) return 'Elevated';
-  return 'Critical';
-}
-
-function getSpo2Status(spo2) {
-  if (spo2 == null) return 'No signal';
-  if (spo2 >= 95) return 'Normal oxygen';
-  if (spo2 >= 92) return 'Monitor';
-  return 'Low oxygen';
-}
-
-function getHrvStatus(hrv) {
-  if (hrv == null) return 'No signal';
-  if (hrv < 20) return 'Low recovery';
-  if (hrv <= 50) return 'Normal range';
-  return 'Recovered well';
+function getRiskLevel(prediction) {
+  if (prediction == null) return { label: 'Không có dữ liệu', color: COLORS.textMuted };
+  if (prediction === 0) return { label: 'An toàn', color: COLORS.success };
+  if (prediction === 1) return { label: 'Nguy cơ cao', color: COLORS.warning };
+  return { label: 'NGUY HIỂM', color: COLORS.danger };
 }
 
 function formatUpdatedAt(timestamp) {
-  if (!timestamp) return 'Waiting for sensor data';
-  return `Updated ${new Date(timestamp * 1000).toLocaleTimeString('vi-VN', {
+  if (!timestamp) return 'Đang đợi dữ liệu từ cảm biến...';
+  return `Cập nhật lúc ${new Date(timestamp * 1000).toLocaleTimeString('vi-VN', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -79,9 +56,9 @@ export default function DashboardPage() {
     if (fallEvent) setShowFallBanner(true);
   }, [fallEvent]);
 
-  const risk = getRiskLevel(latest?.risk_score);
+  const risk = getRiskLevel(latest?.prediction);
   const activity = ACTIVITY_LABELS[latest?.activity_label] || {
-    label: latest?.activity_label || 'No activity label',
+    label: latest?.event || 'Không rõ',
     color: COLORS.textMuted,
   };
 
@@ -91,30 +68,29 @@ export default function DashboardPage() {
   };
 
   const statusTone = device ? 'success' : 'warning';
-  const batteryTone = latest?.battery_node1 > 25 && latest?.battery_node2 > 25 ? 'success' : 'warning';
+  const batteryTone = latest?.battery_pct > 25 ? 'success' : 'warning';
 
   return (
     <>
       <main className="page-shell">
         <header className="page-header">
           <div>
-            <span className="page-eyebrow">Live overview</span>
-            <h1 className="page-title">HealthTrack monitor</h1>
+            <span className="page-eyebrow">Giám sát trực tiếp</span>
+            <h1 className="page-title">HealthTrack Monitor</h1>
             <p className="page-subtitle">
-              Single-screen monitoring for fall risk, movement quality, and key vitals.
-              The layout now prioritizes fast scanning, status contrast, and mobile readability.
+              Hệ thống theo dõi phát hiện ngã, trạng thái pin, trạng thái MPU và gia tốc theo thời gian thực.
             </p>
           </div>
 
           <div className="header-status">
             <div className="status-pill" data-tone={statusTone}>
               <span className="status-dot" />
-              {device ? `${device.name} connected` : 'No device paired'}
+              {device ? `${device.name} đã kết nối` : 'Chưa ghép đôi thiết bị'}
             </div>
             <div className="status-pill" data-tone={batteryTone}>
-              Battery
+              Pin
               <strong>
-                {latest ? `${latest.battery_node1 ?? '--'}% / ${latest.battery_node2 ?? '--'}%` : '--'}
+                {latest ? `${latest.battery_pct ?? '--'}% (${latest.voltage ?? '--'}V)` : '--'}
               </strong>
             </div>
             <div className="meta-line">{formatUpdatedAt(latest?.timestamp)}</div>
@@ -129,18 +105,18 @@ export default function DashboardPage() {
                   {EVENT_TYPE_LABELS[fallEvent.event_type]?.label || fallEvent.event_type}
                 </span>
                 <span className="chip" data-tone="danger">
-                  Risk {fallEvent.risk_score ?? '--'}
+                  Prediction: {fallEvent.prediction ?? '--'}
                 </span>
               </div>
               <button type="button" className="button-ghost" onClick={dismissFall}>
-                Dismiss
+                Bỏ qua
               </button>
             </div>
             <div className="timeline-details" style={{ marginTop: 14 }}>
-              <Detail label="Cause" value={CAUSE_LABELS[fallEvent.cause_hint] || fallEvent.cause_hint} />
-              <Detail label="After event" value={POSTURE_LABELS[fallEvent.posture_after_event] || fallEvent.posture_after_event} />
-              <Detail label="Heart rate" value={fallEvent.hr != null ? `${fallEvent.hr} bpm` : '--'} />
-              <Detail label="SpO2" value={fallEvent.spo2 != null ? `${fallEvent.spo2}%` : '--'} />
+              <Detail label="Nguyên nhân" value={CAUSE_LABELS[fallEvent.cause_hint] || fallEvent.cause_hint} />
+              <Detail label="Trạng thái sau ngã" value={POSTURE_LABELS[fallEvent.posture_after_event] || fallEvent.posture_after_event} />
+              <Detail label="Gia tốc cực đại" value={fallEvent.acc_mag_peak != null ? `${fallEvent.acc_mag_peak.toFixed(2)} g` : '--'} />
+              <Detail label="Góc nghiêng cực đại" value={fallEvent.tilt_angle_peak != null ? `${fallEvent.tilt_angle_peak.toFixed(1)}°` : '--'} />
             </div>
           </section>
         ) : null}
@@ -148,33 +124,33 @@ export default function DashboardPage() {
         <section className="grid grid--hero" style={{ marginTop: showFallBanner && fallEvent ? 16 : 0 }}>
           <article className="card">
             <div className="card-body">
-              <span className="metric-label">Risk score</span>
+              <span className="metric-label">Trạng thái phát hiện ngã</span>
               <div className="hero-metric">
                 <div className="hero-value" style={{ color: risk.color }}>
-                  {loading ? '--' : latest?.risk_score?.toFixed(2) ?? '--'}
+                  {loading ? '--' : latest?.event ?? 'Normal'}
                 </div>
                 <span className="chip" style={{ color: risk.color, borderColor: `${risk.color}44`, background: `${risk.color}18` }}>
                   {risk.label}
                 </span>
               </div>
               <p className="card-subtitle">
-                Current activity:
+                Trạng thái hiện tại:
                 {' '}
                 <strong style={{ color: activity.color }}>{activity.label}</strong>
                 {' • '}
-                {device ? 'Streaming from paired hardware' : 'Using fallback state until a device is available'}
+                {device ? 'Đang nhận dữ liệu từ thiết bị đeo' : 'Sử dụng dữ liệu mặc định'}
               </p>
 
               <div className="grid grid--two" style={{ marginTop: 20 }}>
                 <MiniMetric
-                  label="Node 1 battery"
-                  value={latest?.battery_node1 != null ? `${latest.battery_node1}%` : '--'}
-                  tone={latest?.battery_node1 > 25 ? 'success' : 'warning'}
+                  label="Dung lượng pin"
+                  value={latest?.battery_pct != null ? `${latest.battery_pct}%` : '--'}
+                  tone={latest?.battery_pct > 25 ? 'success' : 'warning'}
                 />
                 <MiniMetric
-                  label="Node 2 battery"
-                  value={latest?.battery_node2 != null ? `${latest.battery_node2}%` : '--'}
-                  tone={latest?.battery_node2 > 25 ? 'success' : 'warning'}
+                  label="Điện áp pin"
+                  value={latest?.voltage != null ? `${latest.voltage} V` : '--'}
+                  tone={latest?.voltage > 3.6 ? 'success' : 'warning'}
                 />
               </div>
             </div>
@@ -182,19 +158,21 @@ export default function DashboardPage() {
 
           <article className="card">
             <div className="card-body stack">
-              <span className="metric-label">Operational summary</span>
+              <span className="metric-label">Thông tin vận hành</span>
               <div className="kv-list">
                 <div className="kv-item">
-                  <span className="kv-label">Data source</span>
-                  <span className="kv-value">{device ? 'Wearable device' : 'No hardware attached'}</span>
+                  <span className="kv-label">Nguồn dữ liệu</span>
+                  <span className="kv-value">{device ? 'Thiết bị đeo' : 'Ngoại tuyến'}</span>
                 </div>
                 <div className="kv-item">
-                  <span className="kv-label">Patient state</span>
-                  <span className="kv-value" style={{ color: activity.color }}>{activity.label}</span>
+                  <span className="kv-label">Cảm biến MPU</span>
+                  <span className="kv-value" style={{ color: latest?.mpu_status ? COLORS.success : COLORS.danger }}>
+                    {latest?.mpu_status ? 'Hoạt động tốt' : 'Mất kết nối'}
+                  </span>
                 </div>
                 <div className="kv-item">
-                  <span className="kv-label">Alert level</span>
-                  <span className="kv-value" style={{ color: risk.color }}>{risk.label}</span>
+                  <span className="kv-label">Số thứ tự tin nhắn (Seq)</span>
+                  <span className="kv-value">{latest?.seq ?? '--'}</span>
                 </div>
               </div>
             </div>
@@ -203,28 +181,28 @@ export default function DashboardPage() {
 
         <section className="grid grid--stats" style={{ marginTop: 16 }}>
           <VitalCard
-            icon="HR"
-            label="Heart rate"
-            value={loading ? '--' : latest?.hr ?? '--'}
-            unit="bpm"
-            color={SENSOR_COLORS.heartRate}
-            note={getHeartRateStatus(latest?.hr)}
+            icon="ACC"
+            label="Gia tốc tổng"
+            value={loading ? '--' : latest?.acc_mag?.toFixed(2) ?? '--'}
+            unit="g"
+            color={SENSOR_COLORS.imuAcc}
+            note={latest?.acc_mag > 2.5 ? 'Gia tốc đột ngột' : 'Bình thường'}
           />
           <VitalCard
-            icon="O2"
-            label="Blood oxygen"
-            value={loading ? '--' : latest?.spo2 ?? '--'}
-            unit="%"
-            color={SENSOR_COLORS.spo2}
-            note={getSpo2Status(latest?.spo2)}
+            icon="ANG"
+            label="Góc nghiêng cơ thể"
+            value={loading ? '--' : latest?.tilt_angle?.toFixed(1) ?? '--'}
+            unit="độ"
+            color={SENSOR_COLORS.imuGyro}
+            note={latest?.tilt_angle > 60 ? 'Nghiêng góc lớn' : 'Bình thường'}
           />
           <VitalCard
-            icon="HRV"
-            label="Recovery"
-            value={loading ? '--' : latest?.hrv ?? '--'}
-            unit="ms"
-            color={SENSOR_COLORS.emg}
-            note={getHrvStatus(latest?.hrv)}
+            icon="XYZ"
+            label="Tọa độ 3 trục (Ax, Ay, Az)"
+            value={loading ? '--' : (latest ? `${latest.ax_g?.toFixed(2)}, ${latest.ay_g?.toFixed(2)}, ${latest.az_g?.toFixed(2)}` : '--')}
+            unit="g"
+            color={COLORS.primary}
+            note="Gia tốc thô 3 chiều"
           />
         </section>
       </main>

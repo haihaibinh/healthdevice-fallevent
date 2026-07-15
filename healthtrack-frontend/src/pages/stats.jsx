@@ -7,64 +7,60 @@ import { useSensorData } from '../hooks/useSensorData';
 import sensorService from '../services/sensorService';
 import toast from '../utils/toast';
 
-const VITAL_TABS = [
+const MOTION_AXES_TABS = [
   {
-    key: 'hr',
-    label: 'Heart rate',
-    unit: 'bpm',
-    color: SENSOR_COLORS.heartRate,
-    yDomain: [0, 150],
-    refs: [
-      { y: 100, label: 'High', color: COLORS.danger },
-      { y: 60, label: 'Low', color: COLORS.primary },
-    ],
+    key: 'ax_g',
+    label: 'Trục X (ax_g)',
+    unit: 'g',
+    color: COLORS.primary,
+    yDomain: [-3, 3],
+    refs: [],
   },
   {
-    key: 'spo2',
-    label: 'SpO2',
-    unit: '%',
-    color: SENSOR_COLORS.spo2,
-    yDomain: [85, 100],
-    refs: [{ y: 95, label: 'Target', color: COLORS.warning }],
+    key: 'ay_g',
+    label: 'Trục Y (ay_g)',
+    unit: 'g',
+    color: COLORS.warning,
+    yDomain: [-3, 3],
+    refs: [],
   },
   {
-    key: 'hrv',
-    label: 'HRV',
-    unit: 'ms',
-    color: SENSOR_COLORS.emg,
-    yDomain: [0, 100],
+    key: 'az_g',
+    label: 'Trục Z (az_g)',
+    unit: 'g',
+    color: SENSOR_COLORS.imuAcc,
+    yDomain: [-3, 3],
     refs: [],
   },
 ];
 
-const SENSOR_TABS = [
-  { key: 'emg_rms', label: 'EMG', unit: 'rms', color: SENSOR_COLORS.emg, yDomain: [0, 1200] },
-  { key: 'acc_mag', label: 'Acceleration', unit: 'g', color: SENSOR_COLORS.imuAcc, yDomain: [0, 4] },
-  { key: 'tilt_angle', label: 'Tilt angle', unit: 'deg', color: SENSOR_COLORS.imuGyro, yDomain: [0, 90] },
+const MOTION_METRICS_TABS = [
+  { key: 'acc_mag', label: 'Gia tốc tổng (acc_mag)', unit: 'g', color: SENSOR_COLORS.imuAcc, yDomain: [0, 5] },
+  { key: 'tilt_angle', label: 'Góc nghiêng cơ thể', unit: 'độ', color: SENSOR_COLORS.imuGyro, yDomain: [0, 180] },
 ];
 
 const EVENT_TYPE_LABELS = {
-  near_fall: { label: 'Near fall', color: COLORS.warning },
-  fall: { label: 'Fall', color: COLORS.danger },
+  near_fall: { label: 'Suýt ngã', color: COLORS.warning },
+  fall: { label: 'Té ngã', color: COLORS.danger },
 };
 
 const CAUSE_LABELS = {
-  mechanical_instability: 'Mechanical instability',
-  sudden_acceleration: 'Sudden acceleration',
-  loss_of_balance: 'Loss of balance',
+  mechanical_instability: 'Mất ổn định cơ học',
+  sudden_acceleration: 'Gia tốc đột ngột',
+  loss_of_balance: 'Mất thăng bằng',
 };
 
 const POSTURE_LABELS = {
-  recovered_standing: 'Recovered standing',
-  on_ground: 'On ground',
-  assisted_recovery: 'Assisted recovery',
+  recovered_standing: 'Đã tự phục hồi',
+  on_ground: 'Nằm dưới sàn',
+  assisted_recovery: 'Được hỗ trợ phục hồi',
 };
 
-function getRiskLevel(score) {
-  if (score == null) return { label: 'No score', color: COLORS.textMuted };
-  if (score < 0.4) return { label: 'Low', color: COLORS.success };
-  if (score < 0.7) return { label: 'Moderate', color: COLORS.warning };
-  return { label: 'High', color: COLORS.danger };
+function getRiskLevel(prediction) {
+  if (prediction == null) return { label: 'Không có dữ liệu', color: COLORS.textMuted };
+  if (prediction === 0) return { label: 'An toàn', color: COLORS.success };
+  if (prediction === 1) return { label: 'Nguy cơ cao', color: COLORS.warning };
+  return { label: 'NGUY HIỂM', color: COLORS.danger };
 }
 
 function formatDateTimeVN(timestamp) {
@@ -85,8 +81,8 @@ export default function StatsPage() {
   const { device } = useDevice();
   const { history } = useSensorData(device?.id, { historyLimit: 100 });
 
-  const [vitalTab, setVitalTab] = useState('hr');
-  const [sensorTab, setSensorTab] = useState('emg_rms');
+  const [axesTab, setAxesTab] = useState('ax_g');
+  const [metricsTab, setMetricsTab] = useState('acc_mag');
   const [paused, setPaused] = useState(false);
   const [fallHistory, setFallHistory] = useState([]);
   const [fallLoading, setFallLoading] = useState(false);
@@ -95,19 +91,39 @@ export default function StatsPage() {
   useEffect(() => {
     if (!device?.id) {
       setFallHistory([]);
-      return;
+      return undefined;
     }
 
-    setFallLoading(true);
-    sensorService
-      .getFallEventHistory(device.id)
-      .then(setFallHistory)
-      .catch(() => setFallHistory([]))
-      .finally(() => setFallLoading(false));
+    let isMounted = true;
+
+    const fetchFallHistory = async (showLoading = false) => {
+      if (showLoading) setFallLoading(true);
+      try {
+        const historyData = await sensorService.getFallEventHistory(device.id);
+        if (isMounted) setFallHistory(historyData);
+      } catch {
+        if (isMounted) setFallHistory([]);
+      } finally {
+        if (isMounted && showLoading) setFallLoading(false);
+      }
+    };
+
+    // Gọi lần đầu khi trang load
+    fetchFallHistory(true);
+
+    // Thiết lập polling mỗi 5 giây
+    const intervalId = setInterval(() => {
+      fetchFallHistory(false);
+    }, 1000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
   }, [device?.id]);
 
-  const activeVital = VITAL_TABS.find((tab) => tab.key === vitalTab);
-  const activeSensor = SENSOR_TABS.find((tab) => tab.key === sensorTab);
+  const activeAxes = MOTION_AXES_TABS.find((tab) => tab.key === axesTab);
+  const activeMetrics = MOTION_METRICS_TABS.find((tab) => tab.key === metricsTab);
 
   const liveData = history;
   if (!paused) frozenData.current = liveData;
@@ -132,21 +148,21 @@ export default function StatsPage() {
       <main className="page-shell">
         <header className="page-header">
           <div>
-            <span className="page-eyebrow">Analytics</span>
-            <h1 className="page-title">Signal trends</h1>
+            <span className="page-eyebrow">Phân tích</span>
+            <h1 className="page-title">Biến thiên tín hiệu</h1>
             <p className="page-subtitle">
-              The charts are grouped for faster reading: vitals first, motion next, incident history last.
+              Xem lịch sử và thời gian thực của dữ liệu gia tốc 3 trục thô cũng như các thông số tư thế tổng hợp.
             </p>
           </div>
           <div className="header-status">
             <button type="button" className={paused ? 'button' : 'button-ghost'} onClick={() => setPaused((value) => !value)}>
-              {paused ? 'Resume live stream' : 'Pause chart'}
+              {paused ? 'Tiếp tục theo dõi' : 'Tạm dừng đồ thị'}
             </button>
             <button type="button" className="button-ghost" onClick={handleExport}>
-              Export CSV
+              Xuất file CSV
             </button>
             <div className="meta-line">
-              {device ? `Tracking ${device.name}` : 'No device paired. Charts stay empty until hardware is available.'}
+              {device ? `Đang theo dõi thiết bị: ${device.name}` : 'Chưa ghép đôi thiết bị.'}
             </div>
           </div>
         </header>
@@ -155,36 +171,36 @@ export default function StatsPage() {
           <div className="card-body">
             <div className="section-heading">
               <div>
-                <h2>Vital trends</h2>
-                <p className="card-subtitle">Focused thresholds and a wider plotting area improve readability.</p>
+                <h2>Gia tốc 3 trục thô</h2>
+                <p className="card-subtitle">Tín hiệu đo được trực tiếp dọc theo các trục X, Y và Z của MPU.</p>
               </div>
             </div>
 
             <div className="chart-meta">
               <div className="tabs">
-                {VITAL_TABS.map((tab) => (
+                {MOTION_AXES_TABS.map((tab) => (
                   <button
                     key={tab.key}
                     type="button"
                     className="tab"
-                    data-active={vitalTab === tab.key}
-                    onClick={() => setVitalTab(tab.key)}
+                    data-active={axesTab === tab.key}
+                    onClick={() => setAxesTab(tab.key)}
                   >
                     {tab.label}
                   </button>
                 ))}
               </div>
-              <span className="chip">{activeVital.unit}</span>
+              <span className="chip">{activeAxes.unit}</span>
             </div>
 
             <SensorChart
               data={chartData}
-              dataKey={activeVital.key}
-              color={activeVital.color}
-              unit={activeVital.unit}
+              dataKey={activeAxes.key}
+              color={activeAxes.color}
+              unit={activeAxes.unit}
               height={260}
-              referenceLines={activeVital.refs}
-              yDomain={activeVital.yDomain}
+              referenceLines={activeAxes.refs}
+              yDomain={activeAxes.yDomain}
             />
           </div>
         </section>
@@ -193,35 +209,35 @@ export default function StatsPage() {
           <div className="card-body">
             <div className="section-heading">
               <div>
-                <h2>Motion signals</h2>
-                <p className="card-subtitle">Switch between EMG, acceleration, and tilt without leaving the same context.</p>
+                <h2>Gia tốc tổng & Góc nghiêng cơ thể</h2>
+                <p className="card-subtitle">Thông số tính toán biểu thị chuyển động tổng hợp và góc nghiêng của cơ thể.</p>
               </div>
             </div>
 
             <div className="chart-meta">
               <div className="tabs">
-                {SENSOR_TABS.map((tab) => (
+                {MOTION_METRICS_TABS.map((tab) => (
                   <button
                     key={tab.key}
                     type="button"
                     className="tab"
-                    data-active={sensorTab === tab.key}
-                    onClick={() => setSensorTab(tab.key)}
+                    data-active={metricsTab === tab.key}
+                    onClick={() => setMetricsTab(tab.key)}
                   >
                     {tab.label}
                   </button>
                 ))}
               </div>
-              <span className="chip">{activeSensor.unit}</span>
+              <span className="chip">{activeMetrics.unit}</span>
             </div>
 
             <SensorChart
               data={chartData}
-              dataKey={activeSensor.key}
-              color={activeSensor.color}
-              unit={activeSensor.unit}
+              dataKey={activeMetrics.key}
+              color={activeMetrics.color}
+              unit={activeMetrics.unit}
               height={240}
-              yDomain={activeSensor.yDomain}
+              yDomain={activeMetrics.yDomain}
             />
           </div>
         </section>
@@ -230,26 +246,26 @@ export default function StatsPage() {
           <div className="card-body">
             <div className="section-heading">
               <div>
-                <h2>Incident history</h2>
-                <p className="card-subtitle">Recent fall events are grouped with cause, posture, and vital context.</p>
+                <h2>Lịch sử sự cố</h2>
+                <p className="card-subtitle">Danh sách các sự kiện té ngã và suýt ngã được ghi nhận.</p>
               </div>
             </div>
 
             {fallLoading ? (
-              <p className="card-subtitle">Loading event history...</p>
+              <p className="card-subtitle">Đang tải lịch sử sự kiện...</p>
             ) : fallHistory.length === 0 ? (
               <div className="timeline-item">
-                <div className="card-title" style={{ fontSize: '1rem' }}>No incidents recorded</div>
-                <div className="card-subtitle">This section will populate when the backend returns fall events.</div>
+                <div className="card-title" style={{ fontSize: '1rem' }}>Không có sự cố nào được ghi nhận</div>
+                <div className="card-subtitle">Lịch sử trống.</div>
               </div>
             ) : (
               <div className="timeline">
                 {fallHistory.map((event) => {
                   const eventType = EVENT_TYPE_LABELS[event.event_type] || {
-                    label: event.event_type,
+                    label: event.event || 'Normal',
                     color: COLORS.warning,
                   };
-                  const risk = getRiskLevel(event.risk_score);
+                  const risk = getRiskLevel(event.prediction);
 
                   return (
                     <article key={event.event_id} className="timeline-item">
@@ -259,17 +275,15 @@ export default function StatsPage() {
                             {eventType.label}
                           </span>
                           <span className="chip" style={{ color: risk.color, borderColor: `${risk.color}33`, background: `${risk.color}14` }}>
-                            Risk {event.risk_score ?? '--'} · {risk.label}
+                            Dự đoán: {event.prediction ?? '--'} · {risk.label}
                           </span>
                         </div>
                         <span className="meta-line">{formatDateTimeVN(event.timestamp_start)}</span>
                       </div>
 
                       <div className="timeline-details">
-                        <StatDetail label="Cause" value={CAUSE_LABELS[event.cause_hint] || event.cause_hint} />
-                        <StatDetail label="Posture" value={POSTURE_LABELS[event.posture_after_event] || event.posture_after_event} />
-                        <StatDetail label="Heart rate" value={event.hr != null ? `${event.hr} bpm` : '--'} />
-                        <StatDetail label="SpO2" value={event.spo2 != null ? `${event.spo2}%` : '--'} />
+                        <StatDetail label="Gia tốc" value={event.acc_mag_peak != null ? `${event.acc_mag_peak.toFixed(2)} g` : '--'} />
+                        <StatDetail label="Góc nghiêng" value={event.tilt_angle_peak != null ? `${event.tilt_angle_peak.toFixed(1)}°` : '--'} />
                       </div>
                     </article>
                   );

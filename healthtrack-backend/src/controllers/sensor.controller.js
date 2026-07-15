@@ -54,7 +54,7 @@ const getFallEvents = async (req, res) => {
     const result = await pool.query(
       `SELECT * FROM sensor_data
        WHERE device_id = $1
-         AND event IN (1, 2)
+         AND prediction IN (1, 2)
        ORDER BY timestamp DESC
        LIMIT 20`,
       [device_id],
@@ -78,7 +78,7 @@ const getLatestFall = async (req, res) => {
     const result = await pool.query(
       `SELECT * FROM sensor_data
        WHERE device_id = $1
-         AND event IN (1, 2)
+         AND prediction IN (1, 2)
          AND timestamp > $2
        ORDER BY timestamp DESC
        LIMIT 1`,

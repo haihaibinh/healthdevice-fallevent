@@ -2,12 +2,12 @@ const mqtt = require('mqtt');
 const { WebSocketServer } = require('ws');
 const pool = require('./db');
 
-// ─── HIVEMQ CLOUD CONFIG ────────────────────────────────────────────────────
-const HIVEMQ_HOST = process.env.HIVEMQ_HOST || '3c42211a3c8f4decbdf20c41e2b72fcf.s1.eu.hivemq.cloud';
-const HIVEMQ_PORT = parseInt(process.env.HIVEMQ_PORT, 10) || 8883;
-const MQTT_USER   = process.env.MQTT_USER   || 'esp32_health_device';
-const MQTT_PASS   = process.env.MQTT_PASS   || 'Sa123456';
-const MQTT_TOPIC  = process.env.MQTT_TOPIC  || 'health/#';
+// ─── MQTT BROKER CONFIG ──────────────────────────────────────────────────────
+const HIVEMQ_HOST = process.env.HIVEMQ_HOST || 'broker.hivemq.com';
+const HIVEMQ_PORT = parseInt(process.env.HIVEMQ_PORT, 10) || 1883;
+const MQTT_USER   = process.env.MQTT_USER   || '';
+const MQTT_PASS   = process.env.MQTT_PASS   || '';
+const MQTT_TOPIC  = process.env.MQTT_TOPIC  || 'health/device/node2';
 
 // ─── WEBSOCKET CONFIG ────────────────────────────────────────────────────────
 const WS_PORT = parseInt(process.env.WS_PORT, 10) || 3001;
@@ -41,16 +41,19 @@ function startMqttSubscriber() {
   });
   console.log(`[WS] WebSocket server listening on port ${WS_PORT}`);
 
-  // 2. Kết nối thẳng lên HiveMQ Cloud qua TLS (mqtts://)
-  const client = mqtt.connect({
+  // 2. Kết nối tới MQTT Broker
+  const isTls = HIVEMQ_PORT === 8883 || HIVEMQ_PORT === 8884 || HIVEMQ_PORT === 443;
+  const connectionOptions = {
     host:     HIVEMQ_HOST,
     port:     HIVEMQ_PORT,
-    protocol: 'mqtts',       // TLS — bắt buộc với HiveMQ Cloud
-    username: MQTT_USER,
-    password: MQTT_PASS,
-    // HiveMQ Cloud dùng cert công khai — Node.js tự verify, không cần CA file riêng
-    rejectUnauthorized: true,
-  });
+    protocol: isTls ? 'mqtts' : 'mqtt',
+  };
+
+  if (MQTT_USER) connectionOptions.username = MQTT_USER;
+  if (MQTT_PASS) connectionOptions.password = MQTT_PASS;
+  if (isTls) connectionOptions.rejectUnauthorized = true;
+
+  const client = mqtt.connect(connectionOptions);
 
   // 3. Subscribe khi kết nối thành công
   client.on('connect', () => {
@@ -88,24 +91,23 @@ client.on('packetreceive', (packet) => {
       // Lưu vào PostgreSQL
       await pool.query(
         `INSERT INTO sensor_data
-          (device_id, timestamp, battery_node1, battery_node2,
-           acceleration, emg, angle,
-           heart_rate, spo2, hrv,
-           risk_score, event)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-[
+          (device_id, timestamp, seq, mpu_status, battery_pct, voltage,
+           prediction, event, acc_mag, angle, ax_g, ay_g, az_g)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        [
           data.device_id,
           normalizedTimestamp,
-          data.battery_node1 ?? null,
-          data.battery_node2 ?? null,
-          data.physics?.acceleration ?? data.raw_data?.acc_g ?? null,
-          data.physics?.emg ?? data.raw_data?.emg_rms ?? null,
-          data.physics?.angle ?? data.raw_data?.angle_deg ?? null,
-          data.biometric?.heart_rate ?? null,
-          data.biometric?.spo2 ?? null,
-          data.biometric?.hrv ?? null,
-          data.risk_score ?? data.inference?.muscle_status ?? null,
-          data.event ?? data.inference?.fall_detected ?? null,
+          data.seq ?? null,
+          data.mpu_status != null ? (data.mpu_status === 1 || data.mpu_status === true || data.mpu_status === 'true') : null,
+          data.battery_pct ?? null,
+          data.voltage != null ? parseFloat(data.voltage) : null,
+          data.prediction ?? null,
+          data.event ?? null,
+          data.physics?.acc_mag ?? null,
+          data.physics?.angle ?? null,
+          data.physics?.ax_g ?? null,
+          data.physics?.ay_g ?? null,
+          data.physics?.az_g ?? null,
         ],
       );
 

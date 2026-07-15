@@ -31,7 +31,7 @@ class DataSync {
           const normalData = mapToFrontend(raw);
           this._callbacks[deviceId]?.onNormal?.(normalData);
 
-          if (raw.event === 1 || raw.event === 2 || raw.inference?.fall_detected === 1) {
+          if (raw.prediction === 1 || raw.prediction === 2 || raw.event === 'Risk' || raw.event === '!!! FALL !!!') {
             this._callbacks[deviceId]?.onFallEvent?.(mapToFallEvent(raw));
           }
         } catch (err) {
