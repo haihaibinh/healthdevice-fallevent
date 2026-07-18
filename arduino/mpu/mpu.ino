@@ -17,7 +17,7 @@ static const char WIFI_PASS[] = "14072005";
 
 static const char MQTT_HOST[]  = "broker.hivemq.com";
 static const int  MQTT_PORT_N  = 1883;
-static const char MQTT_TOPIC[] = "health/device/node2";
+static const char MQTT_TOPIC[] = "health/device/node1";
 static const char DEVICE_ID[]  = "health_device";
 
 // ============================================================
