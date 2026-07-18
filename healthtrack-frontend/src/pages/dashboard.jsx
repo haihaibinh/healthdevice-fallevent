@@ -49,7 +49,7 @@ function formatUpdatedAt(timestamp) {
 
 export default function DashboardPage() {
   const { device } = useDevice();
-  const { latest, fallEvent, clearFallEvent, loading } = useSensorData(device?.id);
+  const { latest, latestEmg, fallEvent, clearFallEvent, loading } = useSensorData(device?.id);
   const [showFallBanner, setShowFallBanner] = useState(false);
 
   useEffect(() => {
@@ -235,6 +235,39 @@ function MiniMetric({ label, value, tone }) {
   );
 }
 
+function EmgBatchList({ title, values, accent }) {
+  return (
+    <div>
+      <div className="stat-label" style={{ marginBottom: 10, color: accent }}>{title}</div>
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 8,
+          padding: 12,
+          borderRadius: 18,
+          border: `1px solid ${accent}33`,
+          background: 'rgba(15, 23, 42, 0.6)',
+        }}
+      >
+        {values.length === 0 ? (
+          <span className="meta-line">--</span>
+        ) : (
+          values.map((value, index) => (
+            <span
+              key={`${title}-${index}`}
+              className="chip"
+              style={{ color: accent, borderColor: `${accent}44`, background: `${accent}12` }}
+            >
+              {Number(value).toFixed(1)}
+            </span>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Detail({ label, value }) {
   return (
     <div>
@@ -243,3 +276,4 @@ function Detail({ label, value }) {
     </div>
   );
 }
+

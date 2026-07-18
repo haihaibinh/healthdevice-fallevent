@@ -29,6 +29,20 @@ const sensorService = {
     return res.data;
   },
 
+  getLatestEmg: async (deviceId) => {
+    const res = await api.get('/emg/latest', {
+      params: { device_id: deviceId },
+    });
+    return mapToEmg(res.data);
+  },
+
+  getEmgHistory: async (deviceId, { limit = 60 } = {}) => {
+    const res = await api.get('/emg/history', {
+      params: { device_id: deviceId, limit },
+    });
+    return res.data.map(mapToEmg);
+  },
+
   exportCsv: async (deviceId) => {
     const data = await sensorService.getNormalHistory(deviceId, { limit: 500 });
     const headers = 'timestamp,seq,mpu_status,battery_pct,voltage,prediction,event,acc_mag,tilt_angle,ax_g,ay_g,az_g,activity_label\n';
@@ -89,6 +103,20 @@ export function mapToFrontend(row) {
       row.prediction === 2 || row.event === '!!! FALL !!!' ? 'fall'
       : row.prediction === 1 || row.event === 'Risk' ? 'near_fall'
       : 'standing',
+  };
+}
+
+export function mapToEmg(row) {
+  if (!row) return null;
+
+  return {
+    device_id: row.device_id,
+    timestamp: row.timestamp,
+    timestamp_ms: row.timestamp_ms,
+    seq: row.seq,
+    emg_status: row.emg_status,
+    emg_raw_list: Array.isArray(row.emg_raw_list) ? row.emg_raw_list : [],
+    emg_rms_list: Array.isArray(row.emg_rms_list) ? row.emg_rms_list : [],
   };
 }
 

@@ -27,6 +27,7 @@ export const ROUTES = {
   REGISTER: '/register',
   DASHBOARD: '/',
   DEVICE: '/device',
+  REHAB_SIT_TO_STAND: '/rehab/sit-to-stand',
   PROFILE: '/profile',
   ADMIN: '/admin',
 };

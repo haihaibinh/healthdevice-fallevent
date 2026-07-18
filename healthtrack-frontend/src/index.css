@@ -43,6 +43,7 @@ body {
   background:
     radial-gradient(circle at top, rgba(45, 212, 191, 0.1), transparent 25%),
     linear-gradient(180deg, #06101f 0%, #020617 100%);
+  overflow-x: hidden;
 }
 
 body,
@@ -61,6 +62,11 @@ a {
 
 #root {
   min-height: 100vh;
+}
+
+button,
+a {
+  transition: color 180ms ease, background 180ms ease, border-color 180ms ease, transform 180ms ease;
 }
 
 h1,

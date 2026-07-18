@@ -7,6 +7,7 @@ const FLUSH_INTERVAL_MS = 150;
 
 export function useSensorData(deviceId, { historyLimit = 60 } = {}) {
   const [latest, setLatest] = useState(null);
+  const [latestEmg, setLatestEmg] = useState(null);
   const [history, setHistory] = useState([]);
   const [fallEvent, setFallEvent] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -19,6 +20,7 @@ export function useSensorData(deviceId, { historyLimit = 60 } = {}) {
   useEffect(() => {
     if (!deviceId) {
       setLatest(null);
+      setLatestEmg(null);
       setHistory([]);
       setFallEvent(null);
       setLoading(false);
@@ -50,9 +52,10 @@ export function useSensorData(deviceId, { historyLimit = 60 } = {}) {
       lastFallTimestampRef.current = 0;
 
       try {
-        const [hist, latestFall] = await Promise.all([
+        const [hist, latestFall, emg] = await Promise.all([
           sensorService.getNormalHistory(deviceId, { limit: historyLimit }),
           sensorService.getLatestFallEvent(deviceId),
+          sensorService.getLatestEmg(deviceId),
         ]);
 
         if (!isMounted) return;
@@ -60,6 +63,7 @@ export function useSensorData(deviceId, { historyLimit = 60 } = {}) {
         historyRef.current = hist.slice(-MAX_HISTORY_POINTS);
         setHistory(historyRef.current);
         setLatest(historyRef.current[historyRef.current.length - 1] || null);
+        setLatestEmg(emg);
 
         if (latestFall) {
           lastFallTimestampRef.current = latestFall.timestamp_start || 0;
@@ -78,6 +82,10 @@ export function useSensorData(deviceId, { historyLimit = 60 } = {}) {
       onNormal: (data) => {
         setError(null);
         liveQueueRef.current.push(data);
+      },
+      onEmg: (emg) => {
+        setError(null);
+        setLatestEmg(emg);
       },
       onFallEvent: (event) => {
         const eventTimestamp = event?.timestamp_start || 0;
@@ -100,5 +108,5 @@ export function useSensorData(deviceId, { historyLimit = 60 } = {}) {
 
   const clearFallEvent = () => setFallEvent(null);
 
-  return { latest, history, fallEvent, clearFallEvent, loading, error };
+  return { latest, latestEmg, history, fallEvent, clearFallEvent, loading, error };
 }

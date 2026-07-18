@@ -1,4 +1,4 @@
-import sensorService, { mapToFallEvent, mapToFrontend } from './sensorService';
+import sensorService, { mapToEmg, mapToFallEvent, mapToFrontend } from './sensorService';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3001';
 const FALL_INTERVAL = 5000;
@@ -11,9 +11,9 @@ class DataSync {
     this._reconnectTimers = {};
   }
 
-  start(deviceId, { onNormal, onFallEvent, onError } = {}) {
+  start(deviceId, { onNormal, onFallEvent, onEmg, onError } = {}) {
     this.stop(deviceId);
-    this._callbacks[deviceId] = { onNormal, onFallEvent, onError };
+    this._callbacks[deviceId] = { onNormal, onFallEvent, onEmg, onError };
 
     const connect = () => {
       const ws = new WebSocket(WS_URL);
@@ -27,6 +27,15 @@ class DataSync {
           // Bỏ filter device_id vì WS gửi string "health_device"
           // còn deviceId từ DB là số nguyên — không bao giờ bằng nhau
           if (!raw) return;
+
+          const isEmg = parsed?.message_type === 'emg'
+            || Array.isArray(raw.emg_raw_list)
+            || Array.isArray(raw.emg_rms_list);
+
+          if (isEmg) {
+            this._callbacks[deviceId]?.onEmg?.(mapToEmg(raw));
+            return;
+          }
 
           const normalData = mapToFrontend(raw);
           this._callbacks[deviceId]?.onNormal?.(normalData);

@@ -58,7 +58,7 @@ static const uint32_t CLOCK_SYNC_EPOCH_THRESHOLD = 1700000000UL;
 #define BAT_ADC_PIN           0
 #define ADC_RESOLUTION        4095.0f
 #define ADC_VREF              3.3f
-#define DIVIDER_RATIO         2.0f
+#define DIVIDER_RATIO         1.87f
 #define BAT_MAX_V             4.2f
 #define BAT_MIN_V             3.0f
 #define ADC_SAMPLES           64

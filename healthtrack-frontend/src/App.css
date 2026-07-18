@@ -283,6 +283,371 @@
   min-height: 280px;
 }
 
+.rehab-shell {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 32px 24px 120px;
+}
+
+.rehab-layout {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.95fr);
+}
+
+.rehab-hero {
+  display: grid;
+  gap: 16px;
+}
+
+.rehab-note {
+  color: var(--text-secondary);
+  font-size: 0.94rem;
+  line-height: 1.65;
+}
+
+.game-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.game-shell {
+  position: relative;
+  overflow: hidden;
+  min-height: 560px;
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(45, 212, 191, 0.12), transparent 32%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(8, 15, 30, 0.92));
+  box-shadow: var(--shadow-strong);
+}
+
+.game-shell::before,
+.game-shell::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 46%;
+  background: linear-gradient(180deg, transparent 0%, rgba(34, 197, 94, 0.04) 100%);
+  pointer-events: none;
+}
+
+.hill-stage {
+  position: absolute;
+  inset: 0;
+  padding: 24px;
+}
+
+.hill-flag {
+  position: absolute;
+  top: 60px;
+  right: 72px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #f8fafc;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.hill-track {
+  position: absolute;
+  inset: auto 34px 82px 34px;
+  height: 280px;
+}
+
+.hill-ramp {
+  position: absolute;
+  inset: auto 100px 20px 118px;
+  height: 220px;
+  clip-path: polygon(0 100%, 100% 0, 100% 100%);
+  background:
+    linear-gradient(135deg, rgba(148, 163, 184, 0.12), rgba(45, 212, 191, 0.08)),
+    linear-gradient(180deg, rgba(14, 165, 233, 0.22), rgba(15, 23, 42, 0.92));
+  border-radius: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+}
+
+.hill-ramp::after {
+  content: '';
+  position: absolute;
+  inset: 18px 20px 18px 20px;
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0 12px, transparent 12px 24px);
+  opacity: 0.16;
+  clip-path: inherit;
+}
+
+.hill-seat {
+  position: absolute;
+  left: 48px;
+  bottom: 22px;
+  display: grid;
+  gap: 8px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.seat-icon,
+.ball-icon {
+  width: 52px;
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 1.6rem;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: 0 18px 30px rgba(2, 6, 23, 0.35);
+}
+
+.ball-position {
+  position: absolute;
+  left: 160px;
+  bottom: 34px;
+  width: 58px;
+  height: 58px;
+  transform: translate3d(calc(var(--ball-x, 0) * 1px), calc(var(--ball-y, 0) * -1px), 0);
+}
+
+.ball-core {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #ffffff 0%, #a7f3d0 14%, #34d399 36%, #0f766e 100%);
+  box-shadow: 0 20px 30px rgba(15, 118, 110, 0.42);
+}
+
+.ball-core::after {
+  content: '';
+  position: absolute;
+  inset: 8px 12px 22px 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.4), transparent 68%);
+  opacity: 0.8;
+}
+
+.ball-score {
+  position: absolute;
+  left: 50%;
+  top: -34px;
+  transform: translateX(-50%);
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(2, 6, 23, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.game-status {
+  position: absolute;
+  left: 24px;
+  top: 24px;
+  max-width: 390px;
+  display: grid;
+  gap: 10px;
+}
+
+.status-card {
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.68);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  backdrop-filter: blur(16px);
+}
+
+.status-title {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+
+.status-value {
+  margin-top: 6px;
+  color: var(--text-primary);
+  font-size: 1.22rem;
+  line-height: 1.25;
+  font-weight: 800;
+}
+
+.status-copy {
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+}
+
+.gauge {
+  display: grid;
+  gap: 10px;
+}
+
+.gauge-track {
+  position: relative;
+  height: 18px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.gauge-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.9), rgba(14, 165, 233, 0.94));
+}
+
+.gauge-mark {
+  position: absolute;
+  top: -8px;
+  width: 2px;
+  height: 34px;
+  background: rgba(245, 158, 11, 0.92);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.16);
+}
+
+.gauge-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+}
+
+.controls-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.controls-grid .button,
+.controls-grid .button-ghost,
+.controls-grid .button-danger {
+  width: 100%;
+}
+
+.calibration-list,
+.feedback-list,
+.summary-list {
+  display: grid;
+  gap: 10px;
+}
+
+.calibration-item,
+.feedback-item,
+.summary-item {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.54);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  color: var(--text-secondary);
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-value {
+  margin-top: 8px;
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.chart-bars {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  min-height: 180px;
+}
+
+.chart-bar-wrap {
+  flex: 1;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.chart-bar {
+  width: 100%;
+  min-height: 16px;
+  border-radius: 18px 18px 8px 8px;
+  background: linear-gradient(180deg, rgba(45, 212, 191, 0.92), rgba(14, 165, 233, 0.78));
+  box-shadow: 0 16px 24px rgba(14, 165, 233, 0.15);
+}
+
+.chart-label {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.pulse {
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.65; transform: scale(0.98); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+@media (max-width: 1100px) {
+  .rehab-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .rehab-shell,
+  .page-shell {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .page-header {
+    flex-direction: column;
+  }
+
+  .game-shell {
+    min-height: 500px;
+  }
+
+  .controls-grid,
+  .summary-grid,
+  .grid--hero,
+  .grid--stats,
+  .grid--two {
+    grid-template-columns: 1fr;
+  }
+
+  .hill-stage {
+    padding: 16px;
+  }
+
+  .hill-track {
+    inset: auto 8px 92px 8px;
+  }
+
+  .hill-ramp {
+    inset: auto 78px 28px 90px;
+  }
+
+  .ball-position {
+    left: 112px;
+  }
+
+  .game-status {
+    max-width: calc(100% - 32px);
+  }
+}
+
 .chart-meta {
   display: flex;
   align-items: center;
@@ -541,9 +906,9 @@
   left: 50%;
   bottom: 20px;
   transform: translateX(-50%);
-  width: min(480px, calc(100vw - 24px));
+  width: min(560px, calc(100vw - 16px));
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   padding: 10px;
   border: 1px solid rgba(148, 163, 184, 0.16);
@@ -560,11 +925,11 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 60px;
+  min-height: 58px;
   border-radius: 18px;
   color: var(--text-muted);
   text-decoration: none;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -647,5 +1012,17 @@
   .nav-dock {
     bottom: 12px;
     border-radius: 20px;
+    gap: 6px;
+    padding: 8px;
   }
+}
+
+.full-width-game {
+  min-height: 760px !important;
+  height: 760px !important;
+  padding: 0 !important;
+}
+.full-width-game::before,
+.full-width-game::after {
+  display: none !important;
 }

@@ -3,6 +3,7 @@ const cors = require('cors');
 require('dotenv').config();
 
 const deviceRoutes = require('./src/routes/device.routes');
+const emgRoutes = require('./src/routes/emg.routes');
 const sensorRoutes = require('./src/routes/sensor.routes');
 
 const app = express();
@@ -19,6 +20,7 @@ app.get('/health', async (req, res) => {
 });
 
 app.use('/api/device', deviceRoutes);
+app.use('/api/emg', emgRoutes);
 app.use('/api/sensor', sensorRoutes);
 
 module.exports = app;

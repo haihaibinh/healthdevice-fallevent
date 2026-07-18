@@ -4,6 +4,7 @@ import './App.css';
 import { DeviceProvider } from './contexts/DeviceContext';
 import { COLORS, ROUTES } from './constants/theme';
 import DashboardPage from './pages/dashboard';
+import SitToStandGamePage from './features/rehabilitation/sit-to-stand-game/pages/SitToStandGamePage';
 import StatsPage from './pages/stats';
 import { registerToast } from './utils/toast';
 
@@ -49,6 +50,7 @@ function AppRoutes() {
     <Routes>
       <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
       <Route path="/stats" element={<StatsPage />} />
+      <Route path={ROUTES.REHAB_SIT_TO_STAND} element={<SitToStandGamePage />} />
       <Route path="*" element={<Navigate to={ROUTES.DASHBOARD} replace />} />
     </Routes>
   );
