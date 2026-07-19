@@ -1,8 +1,8 @@
 import React from 'react';
-import Navbar from '../../../../components/Navbar.jsx';
-import { ROUTES } from '../../../../constants/theme.js';
-import { useDevice } from '../../../../contexts/DeviceContext.jsx';
-import { useSensorData } from '../../../../hooks/useSensorData.js';
+import Navbar from '../components/Navbar.jsx';
+import { ROUTES } from '../constants/theme.js';
+import { useDevice } from '../contexts/DeviceContext.jsx';
+import { useSensorData } from '../hooks/useSensorData.js';
 import { DEFAULT_SIT_TO_STAND_SETTINGS, SIT_TO_STAND_INSTRUCTIONS } from '../constants/sitToStandGameConfig.js';
 import RepResultCard from '../components/RepResultCard.jsx';
 import SessionSummary from '../components/SessionSummary.jsx';

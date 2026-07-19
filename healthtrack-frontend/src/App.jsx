@@ -4,7 +4,7 @@ import './App.css';
 import { DeviceProvider } from './contexts/DeviceContext';
 import { COLORS, ROUTES } from './constants/theme';
 import DashboardPage from './pages/dashboard';
-import SitToStandGamePage from './features/rehabilitation/sit-to-stand-game/pages/SitToStandGamePage';
+import SitToStandGamePage from './pages/SitToStandGamePage';
 import StatsPage from './pages/stats';
 import { registerToast } from './utils/toast';
 
