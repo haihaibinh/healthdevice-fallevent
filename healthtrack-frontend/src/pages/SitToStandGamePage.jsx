@@ -16,6 +16,7 @@ export default function SitToStandGamePage() {
     state, 
     realtime, 
     sessionSummary, 
+    incrementScore,
     startRestCalibration, 
     startReferenceCalibration, 
     startSession, 
@@ -25,7 +26,6 @@ export default function SitToStandGamePage() {
     restartFromConnection 
   } = useSitToStandGame(latestEmg, DEFAULT_SIT_TO_STAND_SETTINGS);
 
-  const repCount = state.repIndex || state.repResults.length;
   const currentRep = state.currentRep || state.repResults[state.repResults.length - 1] || null;
   const instruction = SIT_TO_STAND_INSTRUCTIONS[state.status] || state.message || SIT_TO_STAND_INSTRUCTIONS.IDLE;
 
@@ -46,10 +46,6 @@ export default function SitToStandGamePage() {
         <header className="page-header" style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <span className="page-eyebrow" style={{ color: '#38bdf8', fontSize: '0.85rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Phục hồi chức năng</span>
-            <h1 className="page-title" style={{ fontSize: '2rem', fontWeight: '800', color: '#fff', margin: '4px 0 8px' }}>Endless Rehab Runner</h1>
-            <p className="page-subtitle" style={{ color: '#94a3b8', fontSize: '0.95rem', margin: 0 }}>
-              Game chạy ngang vô hạn (Flappy Bird) điều khiển bằng việc co cơ đùi nhận dữ liệu EMG realtime.
-            </p>
           </div>
 
           <div className="header-status" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -71,22 +67,12 @@ export default function SitToStandGamePage() {
             rms={state.smoothedRms}
             threshold={state.settings.simpleRmsThreshold}
             releaseThreshold={state.settings.contractionReleaseThreshold}
-            repIndex={state.repIndex}
-            maxReps={state.settings.repetitions}
+            score={state.score || 0}
             status={state.status}
             instruction={instruction}
+            onScore={incrementScore}
           />
 
-          {/* HUD OVERLAY 1: GÓC TRÊN TRÁI - SỐ REP & ĐIỂM SỐ */}
-          <div className="hud-panel" style={{ position: 'absolute', top: '20px', left: '20px', background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255, 255, 255, 0.1)', padding: '12px 18px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '4px', pointerEvents: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.3)', zIndex: 5 }}>
-            <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8', fontWeight: 'bold' }}>Tiến Trình Tập</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#34d399', textShadow: '0 0 10px rgba(52,211,153,0.35)', margin: '2px 0' }}>
-              REPS: {repCount}/{state.settings.repetitions}
-            </div>
-            <div style={{ fontSize: '0.85rem', color: '#fbbf24', fontWeight: 'bold' }}>
-              Score: {state.repResults.reduce((sum, r) => sum + (r.score || 0), 0)} pts
-            </div>
-          </div>
 
           {/* HUD OVERLAY 2: GÓC TRÊN PHẢI - THÔNG SỐ CẢM BIẾN REALTIME */}
           <div className="hud-panel" style={{ position: 'absolute', top: '20px', right: '20px', background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255, 255, 255, 0.1)', padding: '12px 18px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '4px', pointerEvents: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.3)', zIndex: 5 }}>
@@ -94,9 +80,6 @@ export default function SitToStandGamePage() {
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', margin: '2px 0' }}>
               <span style={{ fontSize: '1.4rem', fontWeight: '900', color: '#38bdf8', textShadow: '0 0 10px rgba(56,189,248,0.35)' }}>RMS: {Number.isFinite(state.smoothedRms) ? state.smoothedRms.toFixed(1) : '--'}</span>
               <span style={{ fontSize: '0.85rem', color: '#64748b' }}>/ {state.settings.simpleRmsThreshold}</span>
-            </div>
-            <div style={{ fontSize: '0.9rem', color: '#34d399', fontWeight: 'bold' }}>
-              Biến thiên (STD): {emgVariation > 0 ? emgVariation.toFixed(1) : '--'}
             </div>
             <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>
               Trạng thái: <span style={{ color: '#e2e8f0', fontWeight: 'bold' }}>{state.status}</span>

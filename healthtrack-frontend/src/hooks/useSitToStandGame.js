@@ -76,7 +76,7 @@ export function useSitToStandGame(latestEmg, settings = DEFAULT_SIT_TO_STAND_SET
         message: aboveThreshold ? 'Co cơ đùi' : 'Thả lỏng cơ đùi',
       };
 
-      // Xử lý khi ở trạng thái đang tập
+      // Xử lý khi ở trạng thái đang tập (IDLE hoặc READY)
       if (current.status === 'IDLE' || current.status === 'READY') {
         if (aboveThreshold && !wasAboveThreshold && canTrigger) {
           lastTriggerAtRef.current = now;
@@ -101,17 +101,18 @@ export function useSitToStandGame(latestEmg, settings = DEFAULT_SIT_TO_STAND_SET
             repResults,
             currentRep: repResult,
             sessionSummary,
+            repResultAt: now,
           }, done ? 'SESSION_SUMMARY' : 'REP_RESULT', {
             repIndex,
             repResults,
             currentRep: repResult,
             sessionSummary,
             displayProgress: 1,
-            message: done ? 'Đã đủ số rep' : 'Co cơ được ghi nhận',
+            message: done ? `Đã hoàn thành đủ ${current.settings.repetitions} Reps!` : `Ghi nhận Rep ${repIndex} thành công!`,
           });
         }
 
-        if (!aboveThreshold && smoothedRms <= releaseThreshold) {
+        if (smoothedRms < threshold) {
           wasAboveThresholdRef.current = false;
         }
 
@@ -121,15 +122,19 @@ export function useSitToStandGame(latestEmg, settings = DEFAULT_SIT_TO_STAND_SET
         };
       }
 
-      // Tự động chuyển từ kết quả rep về READY khi cơ đùi đã thả lỏng đủ sâu
+      // Tự động chuyển từ kết quả rep về READY khi cơ đùi thả lỏng hoặc sau 1.8s timeout
       if (current.status === 'REP_RESULT') {
-        if (!aboveThreshold && smoothedRms <= releaseThreshold) {
+        const timeInRepResult = now - (current.repResultAt || now);
+        const autoReturn = timeInRepResult >= 1800;
+        const relaxed = smoothedRms <= releaseThreshold || smoothedRms < threshold;
+
+        if (relaxed || autoReturn) {
           wasAboveThresholdRef.current = false;
           return transitionSitToStandState({
             ...nextState,
             displayProgress: 0,
           }, 'READY', {
-            message: 'Thả lỏng thành công. Hãy chuẩn bị co cơ tiếp...',
+            message: 'Hãy chuẩn bị co cơ đùi cho lượt tiếp theo...',
           });
         }
       }
@@ -138,10 +143,20 @@ export function useSitToStandGame(latestEmg, settings = DEFAULT_SIT_TO_STAND_SET
     });
   }, [realtime.frame, realtime.isStale, state.paused, state.settings]);
 
+  const incrementScore = (amount = 1) => {
+    setState((current) => ({
+      ...current,
+      score: (current.score || 0) + amount,
+      gatesCleared: (current.gatesCleared || 0) + 1,
+    }));
+  };
+
   const startRestCalibration = () => {
     setState((current) => transitionSitToStandState(current, 'READY', {
       message: `Chuẩn bị. Ngưỡng co cơ: ${current.settings.simpleRmsThreshold}`,
       displayProgress: 0,
+      score: 0,
+      gatesCleared: 0,
       repResults: [],
       currentRep: null,
       repIndex: 0,
@@ -158,7 +173,9 @@ export function useSitToStandGame(latestEmg, settings = DEFAULT_SIT_TO_STAND_SET
   const startSession = () => {
     wasAboveThresholdRef.current = false;
     setState((current) => transitionSitToStandState(current, 'READY', {
-      message: `Bắt đầu. Chỉ cần RMS > ${current.settings.simpleRmsThreshold} là tính 1 rep.`,
+      message: `Bắt đầu! Co cơ đùi làm bóng bay vượt qua các cột vật cản.`,
+      score: 0,
+      gatesCleared: 0,
       repResults: [],
       currentRep: null,
       repIndex: 0,
@@ -201,6 +218,7 @@ export function useSitToStandGame(latestEmg, settings = DEFAULT_SIT_TO_STAND_SET
     state,
     realtime,
     sessionSummary,
+    incrementScore,
     startRestCalibration,
     startReferenceCalibration,
     startSession,

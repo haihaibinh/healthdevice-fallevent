@@ -15,21 +15,26 @@ export default function SitToStandHillScene({
   rms = 0,
   threshold = 100,
   releaseThreshold = 70,
-  repIndex = 0,
-  maxReps = 5,
+  score = 0,
   status = 'IDLE',
-  instruction = ''
+  instruction = '',
+  onScore,
 }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
+  const onScoreRef = useRef(onScore);
   
+  // Đồng bộ onScore ref
+  useEffect(() => {
+    onScoreRef.current = onScore;
+  }, [onScore]);
+
   // Sử dụng ref để draw loop ở 60fps luôn truy cập dữ liệu mới nhất mà không bị stale closure
   const stateRef = useRef({
     rms,
     threshold,
     releaseThreshold,
-    repIndex,
-    maxReps,
+    score,
     status,
     instruction
   });
@@ -40,12 +45,11 @@ export default function SitToStandHillScene({
       rms,
       threshold,
       releaseThreshold,
-      repIndex,
-      maxReps,
+      score,
       status,
       instruction
     };
-  }, [rms, threshold, releaseThreshold, repIndex, maxReps, status, instruction]);
+  }, [rms, threshold, releaseThreshold, score, status, instruction]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -284,6 +288,25 @@ export default function SitToStandHillScene({
           if (isOver) {
             gate.cleared = true;
             createExplosion(ballX, ballY, '#10B981'); // Hiệu ứng thành công xanh lá
+            createExplosion(ballX, ballY - 30, '#F59E0B');
+            createExplosion(ballX, ballY + 30, '#38BDF8');
+            
+            // Thêm chữ +1 SCORE bay lên
+            particles.push({
+              x: ballX + 20,
+              y: ballY - 20,
+              vx: 0,
+              vy: -1.5,
+              radius: 0,
+              alpha: 1,
+              decay: 0.025,
+              text: '+1 SCORE!',
+              color: '#34D399',
+            });
+
+            if (onScoreRef.current) {
+              onScoreRef.current(1);
+            }
           } else {
             gate.cleared = false;
             createExplosion(ballX, ballY, '#EF4444'); // Hiệu ứng đỏ cảnh báo
@@ -296,17 +319,7 @@ export default function SitToStandHillScene({
         }
       }
 
-      // 8. Lắng nghe repIndex tăng từ React để kích hoạt hiệu ứng Fireworks hoành tráng
-      if (curRep > prevRepIndex) {
-        prevRepIndex = curRep;
-        createExplosion(ballX, ballY, '#10B981');
-        createExplosion(ballX, ballY - 30, '#F59E0B');
-        createExplosion(ballX, ballY + 30, '#38BDF8');
-      } else if (curRep < prevRepIndex) {
-        prevRepIndex = curRep; // Reset khi bắt đầu buổi tập mới
-      }
-
-      // 9. Cập nhật và vẽ các hạt particle
+      // 8. Cập nhật và vẽ các hạt particle
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
         p.x += p.vx;
@@ -320,16 +333,24 @@ export default function SitToStandHillScene({
         
         ctx.save();
         ctx.globalAlpha = p.alpha;
-        ctx.fillStyle = p.color;
-        ctx.shadowBlur = 6;
-        ctx.shadowColor = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-        ctx.fill();
+        if (p.text) {
+          ctx.fillStyle = p.color;
+          ctx.font = 'bold 16px sans-serif';
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = p.color;
+          ctx.fillText(p.text, p.x, p.y);
+        } else {
+          ctx.fillStyle = p.color;
+          ctx.shadowBlur = 6;
+          ctx.shadowColor = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+          ctx.fill();
+        }
         ctx.restore();
       }
 
-      // 10. Vẽ quả bóng Neon phát sáng (Đại diện cho cơ đùi)
+      // 9. Vẽ quả bóng Neon phát sáng (Đại diện cho cơ đùi)
       const isCoCoActive = curRms >= curThresh;
       
       ctx.save();
@@ -377,7 +398,7 @@ export default function SitToStandHillScene({
       ctx.fillText(isCoCoActive ? "CO CƠ" : "THẢ LỎNG", ballX, ballY + ballRadius + 14);
       ctx.textAlign = 'left';
 
-      // 11. Cột sóng phản hồi RMS bên phải Canvas
+      // 10. Cột sóng phản hồi RMS bên phải Canvas
       const waveH = 100;
       const waveW = 10;
       const waveX = width - 20;
@@ -393,6 +414,41 @@ export default function SitToStandHillScene({
       const fillPercent = Math.min(curRms / maxRmsForScale, 1);
       ctx.fillStyle = isCoCoActive ? '#10B981' : '#34D399';
       ctx.fillRect(waveX, waveY + waveH * (1 - fillPercent), waveW, waveH * fillPercent);
+
+      // 11. Hiển thị bảng số SCORE trực tiếp trên Canvas
+      const curScore = stateRef.current.score || 0;
+      ctx.save();
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+      ctx.strokeStyle = 'rgba(52, 211, 153, 0.5)';
+      ctx.lineWidth = 2;
+      drawRoundRectTopOnly(ctx, width / 2 - 90, 15, 180, 44, 14);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#34D399';
+      ctx.font = '900 18px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = '#34D399';
+      ctx.fillText(`SCORE: ${curScore}`, width / 2, 43);
+      ctx.restore();
+
+      // Hiển thị Banner khi vừa ghi nhận Rep thành công
+      if (curStatus === 'REP_RESULT') {
+        ctx.save();
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.88)';
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = '#10B981';
+        ctx.beginPath();
+        drawRoundRectTopOnly(ctx, width / 2 - 140, 68, 280, 36, 10);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`🎉 CHÚC MỪNG! HOÀN THÀNH REP ${curRep}`, width / 2, 91);
+        ctx.restore();
+      }
 
       // Hiển thị chữ PAUSED lớn phủ toàn màn hình khi dừng game
       if (curStatus === 'PAUSED') {
